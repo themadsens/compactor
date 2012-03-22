@@ -2,10 +2,19 @@
 #define F_CPU (16 * 10000UL)  // 16 MHz
 #include <util/delay.h>
 
+AISDecode()
+{
+
+}
+
+Buzzer(int freq)
+{
+}
+
 int main(void)
 {
 	DDRB = 0xf;
-    PORTB = 0xaa;
+   PORTB = 0xaa;
 //exit(0);
 
 	while(1) {
@@ -14,3 +23,4 @@ int main(void)
 	}
 }
 
+// vim: set sw=3 ts=3 noet nu:
