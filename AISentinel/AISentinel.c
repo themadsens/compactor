@@ -32,7 +32,7 @@
 #define TIMER0_TOP  (F_CPU / BAUDRATE)
 #define BUZZER1_TOP (BAUDRATE / 2800)
 #define BUZZER2_TOP (BAUDRATE / 2200)
-#define AIS_TIMEOUT (600 * 100)
+#define AIS_TIMEOUT (600 * 10)
 
 #include <stdint.h>
 #include <avr/io.h>
@@ -60,14 +60,15 @@
 #include <util/delay.h>
 
 // Maintained by timer interrupt. 
-uint32_t upTime;
+uint16_t upTime;
 
-char AISLead[] PROGMEM = "\n!AIVDM,1,1,,\a,";
+//char AISLead[] PROGMEM = "\n!AIVDM,1,1,,\a,";
+char AISLead[] = "\n!AIVDM,1,1,,\a,";
 
 // Nonzero is active alarm. 
 // Updated on every message
 // Zeroed when no message seen in 10 minutes
-uint32_t alarmStart;
+uint16_t alarmStart;
 
 void alarmCond(void);
 
@@ -79,7 +80,8 @@ uint32_t mmsi;
 void AISDecode(int ch)
 {
 	if (aisState < AIST_LEAD_MAX) {
-		char test = pgm_read_byte(&AISLead[aisState]);
+		//char test = pgm_read_byte(&AISLead[aisState]);
+		char test = AISLead[aisState];
 		if (test == '\a' || ch == test)
 			aisState++;
 		else
@@ -208,7 +210,7 @@ void alarmCond(void)
 	alarmStart = upTime ?: 1;
 }
 
-uint8_t halfSec = 0;
+uint8_t dsecCnt = 0;
 uint8_t btnPressed = 0;
 int main(void)
 {
@@ -242,9 +244,7 @@ int main(void)
 
 		// Main timer
 		if (csecCnt >= CSEC_TOP) {
-			upTime++;
 			csecCnt = 0;
-			halfSec = (halfSec + 1) % 100;
 		}
 		else
 			continue;
@@ -271,16 +271,27 @@ int main(void)
 			}
 			btnPressed = 0;
 		}
+		
+		if (dsecCnt >= 10)
+			dsecCnt = 0;
+		else
+			continue;
+
+		/**
+		 * Henceforth every 1/10 second
+		 */
+
+		upTime++;
 
 		// Isophase heartbeat
-		if (halfSec == 0) {
+		if (dsecCnt == 0) {
 			LED_PIN = 0;
 			buzzerHigh = 0;
 			if ((upTime - alarmStart) > AIS_TIMEOUT) {
 				alarmStart = 0;
 			}
 		}
-		else if (halfSec == 50 && (alarmStart || btnPressed)) {
+		else if (dsecCnt == 5 && (alarmStart || btnPressed)) {
 			LED_PIN = 1;
 			buzzerHigh = 1;
 		}
