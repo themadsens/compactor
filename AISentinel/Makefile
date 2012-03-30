@@ -173,6 +173,7 @@ extcoff: $(TARGET).elf
 # Create extended listing file from ELF output file.
 .elf.lss:
 	$(OBJDUMP) -h -S $< > $@
+	$(SIZE) $<
 
 # Create a symbol table from ELF output file.
 .elf.sym:
