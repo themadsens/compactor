@@ -4,7 +4,7 @@
  * AIS Sentinel
  * ============
  * Fires the buzzer and LED if AIS type 14 or MMSI prefix 970 is seen.
- * Both signifies a tranmitting AIS SART
+ * Both signifies a transmitting AIS SART
  *
  * AIS decoding: http://gpsd.berlios.de/AIVDM.txt
  *
@@ -23,6 +23,7 @@
  * App timer at centisecond resolution. Each BAUDRATE / 100
  * Toggle buzzer freq every 500 ms if buzzerOn
  * Toggle LED every 500 ms if ledOn
+ *
  */
 
 
@@ -38,7 +39,6 @@
 #include <avr/io.h>
 #include <avr/sleep.h>
 #include <avr/interrupt.h>
-#include <avr/pgmspace.h>
 #include "util.h"
 
 #if defined (__AVR_ATtiny13__)
@@ -47,6 +47,8 @@
 #define BUZZER_OUT SBIT(DDRB,  PB3)
 #define LED_PIN    SBIT(PORTB, PB4)
 #define LED_OUT    SBIT(DDRB,  PB4)
+#define DBG_PIN    SBIT(PORTB, PB1)
+#define DBG_OUT    SBIT(DDRB,  PB1)
 #define BUTTON_PIN SBIT(PINB,  PB2)
 #define SRXD_PIN   SBIT(PINB,  PB0)
 #define SRXD_IEN   SBIT(PCMSK, PCINT0)
@@ -62,7 +64,6 @@
 // Maintained by timer interrupt. 
 uint16_t upTime;
 
-//char AISLead[] PROGMEM = "\n!AIVDM,1,1,,\a,";
 char AISLead[] = "\n!AIVDM,1,1,,\a,";
 
 // Nonzero is active alarm. 
@@ -72,15 +73,24 @@ uint16_t alarmStart;
 
 void alarmCond(void);
 
-#define AIST_MMSI_OFF 50
-#define AIST_LEAD_MAX 15
+#define AIST_MMSI_ABOVE 60
+#define AIST_MMSI_BELOW 70
+#define AIST_LEAD_MAX 16
 uint8_t aisState; // Counter in AISLead or state
-uint32_t mmsi;
+
+/*
+ * MMSI High 970999999 == 0b 111001 111000 000100 100010 111111
+ * MMSI Low  970000000 == 0b 111001 110100 010000 011010 000000
+ */
+//                111001 111000 000100 100010 111111 EOT
+char MMSIHi[] = { 'q',   'p',   '4',   'R',   'w',   '\0'};
+//                111001 110100 010000 011010 000000 EOT
+char MMSILo[] = { 'q',   'l',   '@',   'J',   '0',   '\x7f'};
 
 void AISDecode(int ch)
 {
+	register int t;
 	if (aisState < AIST_LEAD_MAX) {
-		//char test = pgm_read_byte(&AISLead[aisState]);
 		char test = AISLead[aisState];
 		if (test == '\a' || ch == test)
 			aisState++;
@@ -88,43 +98,40 @@ void AISDecode(int ch)
 			aisState = 0;
 	}
 	else if (aisState == AIST_LEAD_MAX) {
-		if (ch == '>') {      // Type 14: Safety related broadcast
+		if (ch == '>') {          // Type 14: Safety related broadcast
 			alarmCond();
 			// Skip rest of message
 			aisState = 0;
 		}
-		else if (ch == '1') { // Type 01: Position update
-			aisState = AIST_MMSI_OFF;
-			mmsi = 0;
+		else if (ch == '1') {     // Type 01: Position update
+			aisState = AIST_MMSI_ABOVE; // Pick one
 		}
 	}
-	else if (aisState >= AIST_MMSI_OFF) {
-		int code = ch - (ch > 'W' ? 56 : 48);
-		switch (aisState - AIST_MMSI_OFF) {
-		 case 0:
-			// Two topmost bits are the repeat indicator
-			mmsi = (uint32_t)(code & 0xf) << 26; // 26 bits left
-			break;
-		 case 1:
-		 case 2:
-		 case 3:
-		 case 4:
-			mmsi |= code << (20 - (aisState - AIST_MMSI_OFF - 1) * 6);
-			break;
-		 case 5:
-			mmsi |= code >> 4; // 4 LSB bits are navigation status
-			// MMSI complete - Check decimal prefix
-			if ((mmsi / 1000000L) == 970)
-				alarmCond();
-			// Skip rest of message
-			aisState = 0;
-			break;
-		 default:
-			aisState = 0;
+	else if (aisState / 10 == AIST_MMSI_ABOVE) {
+		t = MMSILo[aisState - AIST_MMSI_ABOVE];
+		if (ch > t) {
+			aisState = aisState - AIST_MMSI_ABOVE + AIST_MMSI_BELOW;
+         AISDecode(ch);         // Must be below max as well
 		}
+		else if (ch < t)
+			aisState = 0;
+		else
+			aisState++;
+	}
+	else if (aisState / 10 == AIST_MMSI_BELOW) {
+		t = MMSIHi[aisState - AIST_MMSI_ABOVE];
+		if (ch > t)
+			aisState = 0;
+		else
+			aisState++;
 	}
 	else
+		aisState = 0; // Start over
+
+	if (aisState == AIST_MMSI_ABOVE + 5 || aisState == AIST_MMSI_BELOW + 5) {
 		aisState = 0;
+		alarmCond();
+	}
 }
 
 // Timer0 ISR
@@ -134,18 +141,22 @@ uint8_t buzzerHigh = 0;
 uint16_t buzzerCnt = 0;
 
 uint16_t csecCnt = 0;
+int16_t  csecErr = 0;
 
 static uint8_t srx_cur;
 static uint8_t srx_pending;
 static uint8_t srx_data;
 static uint8_t srx_state;
 
-ISR(TIM0_OVF_vect)
+#define SRXD_READ_LEAD 33 // 33 Cycles from TCNT0 set to read
+ISR(TIM0_COMPA_vect)
 {
+	DBG_PIN = SRXD_PIN;
    if (srx_state)
    {
-      u8             i;
+      register uint8_t i;
 
+	BUZZER_PIN ^= 1;
       switch (--srx_state)
       {
 
@@ -154,6 +165,8 @@ ISR(TIM0_OVF_vect)
             goto end_uart;
          break;
 
+		 case 3:
+			//if (!alarmStart) LED_PIN = 0; // Activity light
        default:
          i = srx_data >> 1;     // LSB first
          if (SRXD_PIN == 1)
@@ -171,6 +184,8 @@ ISR(TIM0_OVF_vect)
 		// Ie. Cancel any half-received on next level change
       SRXD_IEN = 1;
 		srx_state = 0;
+
+		if (!alarmStart) LED_PIN = 0; // Activity light
    }
 end_uart:
 
@@ -183,18 +198,24 @@ end_uart:
 	else {
 		BUZZER_PIN = 0;
 	}
-	csecCnt++;
+	csecCnt += 1 + (csecErr / TIMER0_TOP);
+	csecErr %= TIMER0_TOP;
 }
 
 // Start bit detect ISR
 ISR(PCINT0_vect)
 {
-   TCNT0 = TIMER0_TOP / 2;      // scan at 0.5 bit time
+	DBG_PIN = SRXD_PIN;
+	register int tsave = TCNT0;
+   TCNT0 = (TIMER0_TOP / 2) + SRXD_READ_LEAD; // scan at 0.5 bit time
+	csecErr += ((TIMER0_TOP / 2) + SRXD_READ_LEAD) - tsave;
+
    SRXD_IEN = 0;                // Disable this interrupt until char RX
 	srx_state = 10;
+	//if (!alarmStart) LED_PIN = 1; // Activity light
 }
 
-u8 ugetchar( void )			// wait until byte received
+static inline u8 ugetchar( void )			// wait until byte received
 {
    while (!srx_pending)
       sleep_cpu();
@@ -214,28 +235,33 @@ uint8_t dsecCnt = 0;
 uint8_t btnPressed = 0;
 int main(void)
 {
+	// Might save a few bytes here with a single assignment
 	BUZZER_OUT = 1;
 	LED_OUT    = 1;
+	DBG_OUT    = 1;
 
-	// Pin change interrrupt enable
+	// Pin change interrupt enable
 	GIMSK = (1 << PCIE);
-	// Waveform Generation is CTC (Clear timeron compare) WGM2:0 == 2 == 0b010
+	// Waveform Generation is CTC (Clear timer on compare) WGM2:0 == 2 == 0b010
 	TCCR0A = (1 << WGM01);
-	// Timer connected tomain clock. No prescale: CS2:0 == 1 == 0b001
-	TCCR0A = (1 << CS00);
+	// Timer connected to main clock. No prescale: CS2:0 == 1 == 0b001
+	TCCR0B = (1 << CS00);
 	// Timer0 running at baud rate  -- with interrupt enabled
 	OCR0A = TIMER0_TOP;
-	TIMSK0 = (1 << TOIE0);
+	TIMSK0 = (1 << OCIE0A);
 
 	SRXD_IEN   = 1;       // Arm start bit interrupt
 
 	set_sleep_mode(SLEEP_MODE_IDLE);
-	sleep_enable();
+
 
    sei();                       // Rock & roll
 	while(1) {
 		// Rest here until next timer overrun
+		sleep_enable();
 	   sleep_cpu();
+		sleep_disable();
+
 
 		// Read AIS stram
 		if (srx_pending) {
@@ -272,6 +298,8 @@ int main(void)
 			btnPressed = 0;
 		}
 		
+		dsecCnt++;
+		//DBG_PIN ^= 1;
 		if (dsecCnt >= 10)
 			dsecCnt = 0;
 		else
