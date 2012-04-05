@@ -75,9 +75,9 @@
 #define BAUDRATE    38400
 #define CSEC_TOP    (BAUDRATE / 100)
 #define TIMER0_TOP  (CPU_FREQ / BAUDRATE / 8)
-#define BUZZER1_TOP (BAUDRATE / 3200)
-#define BUZZER2_TOP (BAUDRATE / 2400)
-#define AIS_TIMEOUT (2 * 2)
+#define BUZZER1_TOP (BAUDRATE / 3200 / 2)
+#define BUZZER2_TOP (BAUDRATE / 2400 / 2)
+#define AIS_TIMEOUT (600 * 2)
 
 #define F_CPU CPU_FREQ
 #include <util/delay.h>
@@ -95,23 +95,30 @@ uint16_t alarmStart = 0;
 
 void alarmCond(void);
 
-#define AIST_MMSI_ABOVE 60
-#define AIST_MMSI_BELOW 70
 #define AIST_LEAD_MAX 16
+#define AIST_CHECK_NAVSTATE 20
+#define AIST_MMSI_ABOVE 32
+#define AIST_MMSI_BELOW 40
+#define AIST_MMSI_MASK  0x7
 uint8_t aisState; // Counter in AISLead or state
+uint16_t recentButtonPress = 0;
 
 /*
- * MMSI High 970999999 == 0b 111001 111000 000100 100010 111111
- * MMSI Low  970000000 == 0b 111001 110100 010000 011010 000000
+ * MMSI High 979999999 == 0b 1110 100110 100110 011100 111111 11
+ * MMSI Low  970000000 == 0b 1110 011101 000100 000110 100000 00
+ * NEAT: Two LSB bits with navstate turns out as dont cares :-)
  */
-//                        111001 111000 000100 100010 111111 EOT
-char MMSIHi[] PROGMEM = { 'q',   'p',   '4',   'R',   'w',   '\0'};
-//                        111001 110100 010000 011010 000000 EOT
-char MMSILo[] PROGMEM = { 'q',   'l',   '@',   'J',   '0',   '\x7f'};
+//                          1110 100110 100110 011100 111111
+uint8_t MMSIHi[] PROGMEM = {0x0E,  0x26,  0x26,  0x1C,  0x3F};
+//                          1110 011101 000100 000110 100000
+uint8_t MMSILo[] PROGMEM = {0x0E,  0x1D,  0x04,  0x06,  0x20};
 
 void AISDecode(int ch)
 {
-	register int t;
+	register uint8_t t;
+	register uint8_t num = ch - (ch > 'W' ? 56 : 48);
+	if (0 == (aisState & AIST_MMSI_MASK)) // First char in sequence 
+		num &= 0xf;                        // Clear repeat indicator
 	if (aisState < AIST_LEAD_MAX) {
 			char test = pgm_read_byte(&AISLead[aisState]);
 		if (test == '\a' || ch == test) {
@@ -128,18 +135,13 @@ void AISDecode(int ch)
 		}
 	}
 	else if (aisState == AIST_LEAD_MAX) {
-		if (ch == '>') {          // Type 14: Safety related broadcast
-			alarmCond();
-			// Skip rest of message
-			aisState = 0;
-		}
-		else if (ch == '1') {     // Type 01: Position update
+		if (ch == '1') {     // Type 01: Position update
 			aisState = AIST_MMSI_ABOVE; // Pick one
 		}
 	}
-	else if (aisState / 10 == AIST_MMSI_ABOVE) {
+	else if ((aisState & ~AIST_MMSI_MASK) == AIST_MMSI_ABOVE) {
 		t = pgm_read_byte(&MMSILo[aisState - AIST_MMSI_ABOVE]);
-		if (ch > t) {
+		if (num > t) {
 			aisState = aisState - AIST_MMSI_ABOVE + AIST_MMSI_BELOW;
          AISDecode(ch);         // Must be below max as well
 		}
@@ -148,19 +150,28 @@ void AISDecode(int ch)
 		else
 			aisState++;
 	}
-	else if (aisState / 10 == AIST_MMSI_BELOW) {
-		t = pgm_read_byte(&MMSIHi[aisState - AIST_MMSI_ABOVE]);
+	else if ((aisState & ~AIST_MMSI_MASK) == AIST_MMSI_BELOW) {
+		t = pgm_read_byte(&MMSIHi[aisState - AIST_MMSI_BELOW]);
 		if (ch > t)
 			aisState = 0;
 		else
 			aisState++;
 	}
+	else if (aisState == AIST_CHECK_NAVSTATE) {
+#if ! defined (__AVR_ATtiny13__)
+		num ^= 0xf; // Nav state
+		if (num != 15 || recentButtonPress) // Test message only on recent button press
+			alarmCond();
+#else
+		alarmCond();
+#endif
+		aisState = 0; // Start over
+	}
 	else
 		aisState = 0; // Start over
 
-	if (aisState == AIST_MMSI_ABOVE + 5 || aisState == AIST_MMSI_BELOW + 5) {
-		aisState = 0;
-		alarmCond();
+	if (aisState == AIST_MMSI_ABOVE + 4 || aisState == AIST_MMSI_BELOW + 4) {
+		aisState = AIST_CHECK_NAVSTATE;
 	}
 }
 
@@ -227,6 +238,7 @@ ISR(TIMER0_COMP_vect)
 		else
 			BUZZER_PIN = 0;
 	}
+
 	csecCnt++;
 }
 
@@ -265,7 +277,7 @@ void alarmCond(void)
 }
 
 uint8_t hsecCnt = 0;
-uint8_t btnPressed = 0;
+uint16_t btnPressed = 0;
 int main(void)
 {
 	// Might save a few bytes here with a single assignment
@@ -286,7 +298,7 @@ int main(void)
 #if defined (__AVR_ATtiny13__)
 	GIMSK = BIT(PCIE);     // 1.
 	TCCR0A = BIT(WGM01);   // 2.
-	TCCR0B = BIT(CS00);    // 3.
+	TCCR0B = BIT(CS01);    // 3.
 	TIMSK0 = BIT(OCIE0A);  // 4.
 	OCR0A = TIMER0_TOP;    // 4.
 #elif defined (__AVR_ATmega16__)
@@ -327,12 +339,24 @@ int main(void)
 		// Handle pushbutton
 		if (0 == BUTTON_PIN) {
 			if (btnPressed == 5) {
-				if (!ALARM_ON)
+				if (!ALARM_ON) {
 					buzzerOn = 1;
+//					recentButtonPress = upTime;
+				}
 				else
 					buzzerOn ^= 1;
+				hsecCnt = 0;          // Synchronize tone alternate interval
 			}
-			else btnPressed++;
+			if (btnPressed == 100) {
+				if (ALARM_ON)
+					buzzerOn = 0;         // Silence buzeer while clearing alarm
+			}
+			if (btnPressed >= 500) {
+				if (ALARM_ON)
+					alarmStart = 0;         // Clear alarm
+			}
+			else
+				btnPressed++;
 		}
 		else {
 			if (btnPressed >= 5) {
@@ -358,6 +382,9 @@ int main(void)
 		if ((upTime - alarmStart) >= AIS_TIMEOUT) {
 			alarmStart = 0;
 		}
+//		if ((upTime - recentButtonPress) >= AIS_TIMEOUT) {
+//			recentButtonPress = 0;
+//		}
 
 		// Isophase heartbeat
 		if ((upTime & 0x1) == 0) {
