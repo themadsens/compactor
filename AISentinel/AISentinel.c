@@ -21,42 +21,63 @@
  * Timer
  * -----
  * App timer at centisecond resolution. Each BAUDRATE / 100
- * Toggle buzzer freq every 500 ms if buzzerOn
+ * Toggle buzzer freq every 500 ms if buzzerOet::
  * Toggle LED every 500 ms if ledOn
  *
  */
-
-
-#define CPU_FREQ    (9600 * 1000UL)
-#define BAUDRATE    38400
-#define CSEC_TOP    (BAUDRATE / 100)
-#define TIMER0_TOP  (F_CPU / BAUDRATE)
-#define BUZZER1_TOP (BAUDRATE / 2800)
-#define BUZZER2_TOP (BAUDRATE / 2200)
-#define AIS_TIMEOUT (600 * 10)
 
 #include <stdint.h>
 #include <avr/io.h>
 #include <avr/sleep.h>
 #include <avr/interrupt.h>
+#include <avr/pgmspace.h>
+#include <avr/cpufunc.h>
 #include "util.h"
 
 #if defined (__AVR_ATtiny13__)
 
+#define CPU_FREQ    (9600 * 1000UL)
 #define BUZZER_PIN SBIT(PORTB, PB3)
 #define BUZZER_OUT SBIT(DDRB,  PB3)
 #define LED_PIN    SBIT(PORTB, PB4)
 #define LED_OUT    SBIT(DDRB,  PB4)
+#define ACT_PIN    SBIT(PORTB, PB1)
+#define ACT_OUT    SBIT(DDRB,  PB1)
 #define DBG_PIN    SBIT(PORTB, PB1)
 #define DBG_OUT    SBIT(DDRB,  PB1)
+#define DBG_SET(x) 
 #define BUTTON_PIN SBIT(PINB,  PB2)
+#define BUTTON_PU  SBIT(PORTB, PORTB2)
 #define SRXD_PIN   SBIT(PINB,  PB0)
+#define SRXD_PU    SBIT(PORTB,  PB0)
 #define SRXD_IEN   SBIT(PCMSK, PCINT0)
 //#elif defined (__AVR_ATtiny44__)
-//#elif defined (__AVR_ATmega16__)
+#elif defined (__AVR_ATmega16__)
+#define CPU_FREQ    (16 * 1000 * 1000UL)
+#define BUZZER_PIN SBIT(PORTD, PD5)
+#define BUZZER_OUT SBIT(DDRD,  PD5)
+#define LED_PIN    SBIT(PORTB, PB3)
+#define LED_OUT    SBIT(DDRB,  PB3)
+#define ACT_PIN    SBIT(PORTD, PD7)
+#define ACT_OUT    SBIT(DDRD,  PD7)
+#define DBG_OUT    SBIT(DDRD,  PD4)
+#define DBG_PIN    SBIT(PORTD, PD4)
+#define DBG_SET(x)(DBG_PIN = x)
+#define BUTTON_PIN SBIT(PIND,  PD6)
+#define BUTTON_PU  SBIT(PORTD, PORTD6)
+#define SRXD_PIN   SBIT(PIND,  PD3)
+#define SRXD_PU    SBIT(PORTD, PD3)
+#define SRXD_IEN   SBIT(GICR,  INT1)
 #else
 #error "Must be one of ATtiny13 ATtiny24 ATtiny44 ATmega16"
 #endif
+
+#define BAUDRATE    38400
+#define CSEC_TOP    (BAUDRATE / 100)
+#define TIMER0_TOP  (CPU_FREQ / BAUDRATE / 8)
+#define BUZZER1_TOP (BAUDRATE / 3200)
+#define BUZZER2_TOP (BAUDRATE / 2400)
+#define AIS_TIMEOUT (2 * 2)
 
 #define F_CPU CPU_FREQ
 #include <util/delay.h>
@@ -64,12 +85,13 @@
 // Maintained by timer interrupt. 
 uint16_t upTime;
 
-char AISLead[] = "\n!AIVDM,1,1,,\a,";
+char AISLead[] PROGMEM = "\n\aAIVDM,1,1,,\a,";
 
 // Nonzero is active alarm. 
 // Updated on every message
 // Zeroed when no message seen in 10 minutes
-uint16_t alarmStart;
+uint16_t alarmStart = 0;
+#define ALARM_ON (alarmStart != 0)
 
 void alarmCond(void);
 
@@ -82,20 +104,28 @@ uint8_t aisState; // Counter in AISLead or state
  * MMSI High 970999999 == 0b 111001 111000 000100 100010 111111
  * MMSI Low  970000000 == 0b 111001 110100 010000 011010 000000
  */
-//                111001 111000 000100 100010 111111 EOT
-char MMSIHi[] = { 'q',   'p',   '4',   'R',   'w',   '\0'};
-//                111001 110100 010000 011010 000000 EOT
-char MMSILo[] = { 'q',   'l',   '@',   'J',   '0',   '\x7f'};
+//                        111001 111000 000100 100010 111111 EOT
+char MMSIHi[] PROGMEM = { 'q',   'p',   '4',   'R',   'w',   '\0'};
+//                        111001 110100 010000 011010 000000 EOT
+char MMSILo[] PROGMEM = { 'q',   'l',   '@',   'J',   '0',   '\x7f'};
 
 void AISDecode(int ch)
 {
 	register int t;
 	if (aisState < AIST_LEAD_MAX) {
-		char test = AISLead[aisState];
-		if (test == '\a' || ch == test)
+			char test = pgm_read_byte(&AISLead[aisState]);
+		if (test == '\a' || ch == test) {
 			aisState++;
-		else
+		}
+		else {
 			aisState = 0;
+			ACT_PIN = 1;                 // Activity light
+			DBG_SET(0);
+		}
+		if (aisState > 1) {
+			ACT_PIN = 0;                 // Activity light
+			DBG_SET(1);
+		}
 	}
 	else if (aisState == AIST_LEAD_MAX) {
 		if (ch == '>') {          // Type 14: Safety related broadcast
@@ -108,7 +138,7 @@ void AISDecode(int ch)
 		}
 	}
 	else if (aisState / 10 == AIST_MMSI_ABOVE) {
-		t = MMSILo[aisState - AIST_MMSI_ABOVE];
+		t = pgm_read_byte(&MMSILo[aisState - AIST_MMSI_ABOVE]);
 		if (ch > t) {
 			aisState = aisState - AIST_MMSI_ABOVE + AIST_MMSI_BELOW;
          AISDecode(ch);         // Must be below max as well
@@ -119,7 +149,7 @@ void AISDecode(int ch)
 			aisState++;
 	}
 	else if (aisState / 10 == AIST_MMSI_BELOW) {
-		t = MMSIHi[aisState - AIST_MMSI_ABOVE];
+		t = pgm_read_byte(&MMSIHi[aisState - AIST_MMSI_ABOVE]);
 		if (ch > t)
 			aisState = 0;
 		else
@@ -136,8 +166,7 @@ void AISDecode(int ch)
 
 // Timer0 ISR
 uint8_t buzzerOn   = 0;
-uint8_t buzzerHigh = 0;
-#define BuzzerTop  (buzzerHigh ? BUZZER1_TOP : BUZZER2_TOP)
+#define BuzzerTop  ((upTime & 1) ? BUZZER1_TOP : BUZZER2_TOP)
 uint16_t buzzerCnt = 0;
 
 uint16_t csecCnt = 0;
@@ -149,71 +178,75 @@ static uint8_t srx_data;
 static uint8_t srx_state;
 
 #define SRXD_READ_LEAD 33 // 33 Cycles from TCNT0 set to read
+#if defined (__AVR_ATtiny13__)
 ISR(TIM0_COMPA_vect)
+#elif defined (__AVR_ATmega16__)
+ISR(TIMER0_COMP_vect)
+#endif
 {
-	DBG_PIN = SRXD_PIN;
    if (srx_state)
    {
       register uint8_t i;
 
-	BUZZER_PIN ^= 1;
       switch (--srx_state)
       {
 
        case 9:
          if (SRXD_PIN == 0)     // start bit valid
-            goto end_uart;
+            break;
+			srx_state = 0;
          break;
 
-		 case 3:
-			//if (!alarmStart) LED_PIN = 0; // Activity light
        default:
          i = srx_data >> 1;     // LSB first
          if (SRXD_PIN == 1)
             i |= 0x80;          // data bit = 1
          srx_data = i;
-			goto end_uart;
+			break;
 
        case 0:
          if (SRXD_PIN == 1) {   // stop bit valid
 				srx_cur = srx_data;
 				srx_pending = 1;
+				if (srx_cur >= 'A' && srx_cur <= 'z')
+					_NOP();
          }
       }
+   }
+	if (!srx_state)
+	{
 		// Start bit interrupt enable.
 		// Ie. Cancel any half-received on next level change
       SRXD_IEN = 1;
-		srx_state = 0;
+	}
 
-		if (!alarmStart) LED_PIN = 0; // Activity light
-   }
-end_uart:
-
-	if (buzzerOn) {
-		if (buzzerCnt++ >= BuzzerTop) {
+	if (buzzerCnt++ >= BuzzerTop) {
+		buzzerCnt = 0;
+		if (buzzerOn)
 			BUZZER_PIN ^= 1;
-			buzzerCnt = 0;
-		}
+		else
+			BUZZER_PIN = 0;
 	}
-	else {
-		BUZZER_PIN = 0;
-	}
-	csecCnt += 1 + (csecErr / TIMER0_TOP);
-	csecErr %= TIMER0_TOP;
+	csecCnt++;
 }
 
 // Start bit detect ISR
+#if defined (__AVR_ATtiny13__)
 ISR(PCINT0_vect)
+#elif defined (__AVR_ATmega16__)
+ISR(INT1_vect)
+#endif
 {
-	DBG_PIN = SRXD_PIN;
-	register int tsave = TCNT0;
-   TCNT0 = (TIMER0_TOP / 2) + SRXD_READ_LEAD; // scan at 0.5 bit time
-	csecErr += ((TIMER0_TOP / 2) + SRXD_READ_LEAD) - tsave;
+	// Scan at 0.5 bit time.
+	// This should also even out the timer error
+	// Provided char interleave is truly random. Fat chance ..
+	// Accumulating the timer error eats up too many instructions
+   TCNT0 = (TIMER0_TOP / 2);
 
    SRXD_IEN = 0;                // Disable this interrupt until char RX
 	srx_state = 10;
-	//if (!alarmStart) LED_PIN = 1; // Activity light
 }
+
 
 static inline u8 ugetchar( void )			// wait until byte received
 {
@@ -225,36 +258,48 @@ static inline u8 ugetchar( void )			// wait until byte received
 
 void alarmCond(void)
 {
-	if (!alarmStart) {
+	if (!ALARM_ON) {
 		buzzerOn = 1;
 	}
 	alarmStart = upTime ?: 1;
 }
 
-uint8_t dsecCnt = 0;
+uint8_t hsecCnt = 0;
 uint8_t btnPressed = 0;
 int main(void)
 {
 	// Might save a few bytes here with a single assignment
 	BUZZER_OUT = 1;
 	LED_OUT    = 1;
+	ACT_OUT    = 1;
 	DBG_OUT    = 1;
+	BUTTON_PU  = 1;
+	SRXD_PU    = 1;
 
-	// Pin change interrupt enable
-	GIMSK = (1 << PCIE);
-	// Waveform Generation is CTC (Clear timer on compare) WGM2:0 == 2 == 0b010
-	TCCR0A = (1 << WGM01);
-	// Timer connected to main clock. No prescale: CS2:0 == 1 == 0b001
-	TCCR0B = (1 << CS00);
-	// Timer0 running at baud rate  -- with interrupt enabled
-	OCR0A = TIMER0_TOP;
-	TIMSK0 = (1 << OCIE0A);
+	ACT_PIN = 1;
+	LED_PIN = 1;
+
+	// 1. Pin change interrupt enable
+	// 2. Waveform Generation is CTC (Clear timer on compare) 
+	// 3. Timer connected to main clock. Prescale = 8
+	// 4. Timer0 running at baud rate  -- with interrupt enabled
+#if defined (__AVR_ATtiny13__)
+	GIMSK = BIT(PCIE);     // 1.
+	TCCR0A = BIT(WGM01);   // 2.
+	TCCR0B = BIT(CS00);    // 3.
+	TIMSK0 = BIT(OCIE0A);  // 4.
+	OCR0A = TIMER0_TOP;    // 4.
+#elif defined (__AVR_ATmega16__)
+	MCUCR = 0;//BIT(ISC10);    // 1.
+	TCCR0 = BIT(WGM01);    // 2.
+	TCCR0 |= BIT(CS01);    // 3.
+	TIMSK = BIT(OCIE0);    // 4.
+	OCR0 = TIMER0_TOP;     // 4.
+#endif
 
 	SRXD_IEN   = 1;       // Arm start bit interrupt
 
 	set_sleep_mode(SLEEP_MODE_IDLE);
-
-
    sei();                       // Rock & roll
 	while(1) {
 		// Rest here until next timer overrun
@@ -280,9 +325,9 @@ int main(void)
 		 */
 
 		// Handle pushbutton
-		if (BUTTON_PIN) {
+		if (0 == BUTTON_PIN) {
 			if (btnPressed == 5) {
-				if (!alarmStart)
+				if (!ALARM_ON)
 					buzzerOn = 1;
 				else
 					buzzerOn ^= 1;
@@ -291,37 +336,36 @@ int main(void)
 		}
 		else {
 			if (btnPressed >= 5) {
-				if (!alarmStart) {
+				if (!ALARM_ON) {
 					buzzerOn = 0;
 				}
 			}
 			btnPressed = 0;
 		}
 		
-		dsecCnt++;
-		//DBG_PIN ^= 1;
-		if (dsecCnt >= 10)
-			dsecCnt = 0;
+		hsecCnt++;
+		if (hsecCnt >= 50)
+			hsecCnt = 0;
 		else
 			continue;
 
 		/**
-		 * Henceforth every 1/10 second
+		 * Henceforth every 1/2 second
 		 */
 
 		upTime++;
 
-		// Isophase heartbeat
-		if (dsecCnt == 0) {
-			LED_PIN = 0;
-			buzzerHigh = 0;
-			if ((upTime - alarmStart) > AIS_TIMEOUT) {
-				alarmStart = 0;
-			}
+		if ((upTime - alarmStart) >= AIS_TIMEOUT) {
+			alarmStart = 0;
 		}
-		else if (dsecCnt == 5 && (alarmStart || btnPressed)) {
+
+		// Isophase heartbeat
+		if ((upTime & 0x1) == 0) {
 			LED_PIN = 1;
-			buzzerHigh = 1;
+		}
+		else {
+			if (ALARM_ON || btnPressed >= 5)
+				LED_PIN = 0;
 		}
 
 	}
