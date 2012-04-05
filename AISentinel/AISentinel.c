@@ -3,8 +3,9 @@
  **                                                   MarkDown
  * AIS Sentinel
  * ============
- * Fires the buzzer and LED if AIS type 14 or MMSI prefix 970 is seen.
+ * Fires the buzzer and LED if AIS MMSI prefix 97 is seen.
  * Both signifies a transmitting AIS SART
+ * Test mode (nav state 15) only if button recently pressed
  *
  * AIS decoding: http://gpsd.berlios.de/AIVDM.txt
  *
@@ -20,8 +21,8 @@
  *
  * Timer
  * -----
- * App timer at centisecond resolution. Each BAUDRATE / 100
- * Toggle buzzer freq every 500 ms if buzzerOet::
+ * App timer at half second resolution. Updated each BAUDRATE / 100
+ * Toggle buzzer freq every 500 ms if buzzerOn
  * Toggle LED every 500 ms if ledOn
  *
  */
@@ -51,7 +52,6 @@
 #define SRXD_PIN   SBIT(PINB,  PB0)
 #define SRXD_PU    SBIT(PORTB,  PB0)
 #define SRXD_IEN   SBIT(PCMSK, PCINT0)
-//#elif defined (__AVR_ATtiny44__)
 #elif defined (__AVR_ATmega16__)
 #define CPU_FREQ    (16 * 1000 * 1000UL)
 #define BUZZER_PIN SBIT(PORTD, PD5)
@@ -272,11 +272,7 @@ void alarmCond(void)
 }
 
 uint8_t hsecCnt = 0;
-#if ! defined (__AVR_ATtiny13__)
-uint16_t btnPressed = 0;
-#else
 uint8_t btnPressed = 0;
-#endif
 int main(void)
 {
 	// Might save a few bytes here with a single assignment
@@ -284,13 +280,12 @@ int main(void)
 	LED_OUT    = 1;
 	ACT_OUT    = 1;
 	BUTTON_PU  = 1;
-	SRXD_PU    = 1;
 #if ! defined (__AVR_ATtiny13__)
+	SRXD_PU    = 1;
 	DBG_OUT    = 1;
 #endif
 
 	ACT_PIN = 1;
-	LED_PIN = 1;
 
 	// 1. Pin change interrupt enable
 	// 2. Waveform Generation is CTC (Clear timer on compare) 
@@ -342,25 +337,13 @@ int main(void)
 			if (btnPressed == 5) {
 				if (!ALARM_ON) {
 					buzzerOn = 1;
-					recentButtonPress = upTime;
+					recentButtonPress = upTime ?: 1;
 				}
 				else
 					buzzerOn ^= 1;
 				hsecCnt = 0;          // Synchronize tone alternate interval
 			}
-#if ! defined (__AVR_ATtiny13__)
-			if (btnPressed == 100) {
-				if (ALARM_ON)
-					buzzerOn = 0;         // Silence buzeer while clearing alarm
-			}
-			if (btnPressed >= 500) {
-				if (ALARM_ON)
-					alarmStart = 0;         // Clear alarm
-			}
-			else
-#else
 			if (btnPressed < 100)
-#endif
 				btnPressed++;
 		}
 		else {
@@ -381,17 +364,15 @@ int main(void)
 		/**
 		 * Henceforth every 1/2 second
 		 */
-
 		upTime++;
 
 		if ((upTime - alarmStart) >= AIS_TIMEOUT) {
 			alarmStart = 0;
 		}
-#if 1
 		if ((upTime - recentButtonPress) >= AIS_TIMEOUT) {
 			recentButtonPress = 0;
 		}
-#endif
+
 
 		// Isophase heartbeat
 		if ((upTime & 0x1) == 0) {
