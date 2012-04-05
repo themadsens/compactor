@@ -158,13 +158,8 @@ void AISDecode(int ch)
 			aisState++;
 	}
 	else if (aisState == AIST_CHECK_NAVSTATE) {
-#if ! defined (__AVR_ATtiny13__)
-		num ^= 0xf; // Nav state
-		if (num != 15 || recentButtonPress) // Test message only on recent button press
+		if ((num & 0xf) != 15 || recentButtonPress) // Test message only on recent button press
 			alarmCond();
-#else
-		alarmCond();
-#endif
 		aisState = 0; // Start over
 	}
 	else
@@ -277,16 +272,22 @@ void alarmCond(void)
 }
 
 uint8_t hsecCnt = 0;
+#if ! defined (__AVR_ATtiny13__)
 uint16_t btnPressed = 0;
+#else
+uint8_t btnPressed = 0;
+#endif
 int main(void)
 {
 	// Might save a few bytes here with a single assignment
 	BUZZER_OUT = 1;
 	LED_OUT    = 1;
 	ACT_OUT    = 1;
-	DBG_OUT    = 1;
 	BUTTON_PU  = 1;
 	SRXD_PU    = 1;
+#if ! defined (__AVR_ATtiny13__)
+	DBG_OUT    = 1;
+#endif
 
 	ACT_PIN = 1;
 	LED_PIN = 1;
@@ -341,12 +342,13 @@ int main(void)
 			if (btnPressed == 5) {
 				if (!ALARM_ON) {
 					buzzerOn = 1;
-//					recentButtonPress = upTime;
+					recentButtonPress = upTime;
 				}
 				else
 					buzzerOn ^= 1;
 				hsecCnt = 0;          // Synchronize tone alternate interval
 			}
+#if ! defined (__AVR_ATtiny13__)
 			if (btnPressed == 100) {
 				if (ALARM_ON)
 					buzzerOn = 0;         // Silence buzeer while clearing alarm
@@ -356,6 +358,9 @@ int main(void)
 					alarmStart = 0;         // Clear alarm
 			}
 			else
+#else
+			if (btnPressed < 100)
+#endif
 				btnPressed++;
 		}
 		else {
@@ -382,9 +387,11 @@ int main(void)
 		if ((upTime - alarmStart) >= AIS_TIMEOUT) {
 			alarmStart = 0;
 		}
-//		if ((upTime - recentButtonPress) >= AIS_TIMEOUT) {
-//			recentButtonPress = 0;
-//		}
+#if 1
+		if ((upTime - recentButtonPress) >= AIS_TIMEOUT) {
+			recentButtonPress = 0;
+		}
+#endif
 
 		// Isophase heartbeat
 		if ((upTime & 0x1) == 0) {
