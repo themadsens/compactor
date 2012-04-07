@@ -35,7 +35,7 @@
 #include <avr/cpufunc.h>
 #include "util.h"
 
-#if defined (__AVR_ATtiny24__)
+#if defined (__AVR_ATtiny13__)
 
 #define CPU_FREQ    (9600 * 1000UL)
 #define BUZZER_PIN SBIT(PORTB, PB3)
@@ -69,7 +69,7 @@
 #define SRXD_PU    SBIT(PORTD, PD3)
 #define SRXD_IEN   SBIT(GICR,  INT1)
 #else
-#error "Must be one of ATtiny24 ATtiny44 ATmega16"
+#error "Must be one of ATtiny13 ATtiny24 ATtiny44 ATmega16"
 #endif
 
 #define BAUDRATE    38400
@@ -85,7 +85,7 @@
 // Maintained by timer interrupt. 
 uint16_t upTime;
 
-char AISLead[] PROGMEM = "\n\aAIVDM,1,1,,\a,";
+char AISLead[] PROGMEM = "\n!AIVDM,1,1,,\a,";
 
 // Nonzero is active alarm. 
 // Updated on every message
@@ -131,7 +131,7 @@ void AISDecode(int ch)
 			ACT_PIN = 1;                 // Activity light
 			DBG_SET(0);
 		}
-		if (aisState > 1) {
+		if (aisState > 4) {
 			ACT_PIN = 0;                 // Activity light
 			DBG_SET(1);
 		}
@@ -186,7 +186,7 @@ static uint8_t srx_data;
 static uint8_t srx_state;
 
 #define SRXD_READ_LEAD 33 // 33 Cycles from TCNT0 set to read
-#if defined (__AVR_ATtiny24__)
+#if defined (__AVR_ATtiny13__)
 ISR(TIM0_COMPA_vect)
 #elif defined (__AVR_ATmega16__)
 ISR(TIMER0_COMP_vect)
@@ -240,7 +240,7 @@ ISR(TIMER0_COMP_vect)
 }
 
 // Start bit detect ISR
-#if defined (__AVR_ATtiny24__)
+#if defined (__AVR_ATtiny13__)
 ISR(PCINT0_vect)
 #elif defined (__AVR_ATmega16__)
 ISR(INT1_vect)
@@ -282,8 +282,10 @@ int main(void)
 	LED_OUT    = 1;
 	ACT_OUT    = 1;
 	BUTTON_PU  = 1;
+#if ! defined (__AVR_ATtiny13__)
 	SRXD_PU    = 1;
 	DBG_OUT    = 1;
+#endif
 
 	ACT_PIN = 1;
 
@@ -291,7 +293,7 @@ int main(void)
 	// 2. Waveform Generation is CTC (Clear timer on compare) 
 	// 3. Timer connected to main clock. Prescale = 8
 	// 4. Timer0 running at baud rate  -- with interrupt enabled
-#if defined (__AVR_ATtiny24__)
+#if defined (__AVR_ATtiny13__)
 	GIMSK = BIT(PCIE);     // 1.
 	TCCR0A = BIT(WGM01);   // 2.
 	TCCR0B = BIT(CS01);    // 3.
