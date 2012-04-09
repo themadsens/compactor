@@ -1,0 +1,258 @@
+# EESchema Netlist Version 1.1 created  07-04-2012 17:04:03
+(
+ ( /4F7E1001 $noname$ C1 100_uF
+  ( 1 +12V )
+  ( 2 GND )
+ )
+ ( /4F7F0CB0 $noname$ C2 100_uF
+  ( 1 VCC )
+  ( 2 GND )
+ )
+ ( /4F800EFF $noname$ C3 22_pF
+  ( 1 N-000016 )
+  ( 2 GND )
+ )
+ ( /4F800ED9 $noname$ C4 22_pF
+  ( 1 N-000015 )
+  ( 2 GND )
+ )
+ ( /4F8015C8 $noname$ D1 ACT
+  ( 1 N-000022 )
+  ( 2 N-000007 )
+ )
+ ( /4F8015EA $noname$ D2 ALARM
+  ( 1 N-000026 )
+  ( 2 N-000008 )
+ )
+ ( /4F800B0F DIP14 IC1 ATTINY24-P
+  ( 1 VCC )
+  ( 2 N-000016 )
+  ( 3 N-000015 )
+  ( 4 //RST_dW )
+  ( 5 N-000026 )
+  ( 6 N-000022 )
+  ( 7 /MOSI )
+  ( 8 /MISO )
+  ( 9 /SCK )
+  ( 10 N-000006 )
+  ( 11 N-000021 )
+  ( 12 N-000024 )
+  ( 13 N-000030 )
+  ( 14 GND )
+ )
+ ( /4F803C86 $noname$ K1 RELAY
+  ( 1 N-000023 )
+  ( 2 N-000028 )
+  ( 3 N-000027 )
+  ( 4 +12V )
+  ( 5 N-000025 )
+ )
+ ( /4F803CE1 $noname$ K2 CONN_3
+  ( 1 N-000027 )
+  ( 2 N-000028 )
+  ( 3 N-000023 )
+ )
+ ( /4F7FFBF7 $noname$ P1 12_V
+  ( 1 +12V )
+  ( 2 GND )
+ )
+ ( /4F800C49 $noname$ P2 BTN
+  ( 1 N-000024 )
+  ( 2 GND )
+ )
+ ( /4F7FFC7F $noname$ P3 NMEA
+  ( 1 /NMEA_IN )
+  ( 2 GND )
+ )
+ ( /4F802836 $noname$ P4 ACT
+  ( 1 N-000007 )
+  ( 2 N-000022 )
+ )
+ ( /4F802817 $noname$ P5 ALARM
+  ( 1 N-000008 )
+  ( 2 N-000026 )
+ )
+ ( /4F8011FD $noname$ P6 ISP_/_dW
+  ( 1 /MOSI )
+  ( 2 VCC )
+  ( 3 ? )
+  ( 4 GND )
+  ( 5 //RST_dW )
+  ( 6 GND )
+  ( 7 /SCK )
+  ( 8 GND )
+  ( 9 /MISO )
+  ( 10 GND )
+ )
+ ( /4F800A24 $noname$ Q1 BC547
+  ( 1 ? )
+  ( 2 N-000012 )
+  ( 3 N-000030 )
+ )
+ ( /4F8018EC $noname$ Q2 BC547
+  ( 1 ? )
+  ( 2 N-000011 )
+  ( 3 N-000002 )
+ )
+ ( /4F802239 $noname$ Q3 BC547
+  ( 1 ? )
+  ( 2 N-000010 )
+  ( 3 N-000025 )
+ )
+ ( /4F800A50 $noname$ R1 10k
+  ( 1 /NMEA_IN )
+  ( 2 N-000012 )
+ )
+ ( /4F800A75 $noname$ R2 10k
+  ( 1 N-000012 )
+  ( 2 GND )
+ )
+ ( /4F800A3A $noname$ R3 10k
+  ( 1 VCC )
+  ( 2 N-000030 )
+ )
+ ( /4F8018EA $noname$ R4 10k
+  ( 1 N-000021 )
+  ( 2 N-000011 )
+ )
+ ( /4F8018E8 $noname$ R5 10k
+  ( 1 N-000011 )
+  ( 2 GND )
+ )
+ ( /4F801655 $noname$ R6 470
+  ( 1 VCC )
+  ( 2 N-000007 )
+ )
+ ( /4F801677 $noname$ R7 470
+  ( 1 VCC )
+  ( 2 N-000008 )
+ )
+ ( /4F802237 $noname$ R8 10k
+  ( 1 N-000006 )
+  ( 2 N-000010 )
+ )
+ ( /4F80223B $noname$ R9 10k
+  ( 1 N-000010 )
+  ( 2 GND )
+ )
+ ( /4F802118 $noname$ SW1 PUSHBUTTON
+  ( 1 GND )
+  ( 2 N-000024 )
+ )
+ ( /4F7F0C97 $noname$ U1 LM7805
+  ( GND GND )
+  ( VI +12V )
+  ( VO VCC )
+ )
+ ( /4F8023DC $noname$ X1 BUZZER
+  ( 1 +12V )
+  ( 2 N-000002 )
+ )
+ ( /4F800E6D $noname$ X2 12_MHz
+  ( 1 N-000015 )
+  ( 2 N-000016 )
+ )
+)
+*
+{ Allowed footprints by component:
+$component C1
+ CP*
+ SM*
+$endlist
+$component C2
+ CP*
+ SM*
+$endlist
+$component C3
+ SM*
+ C?
+ C1-1
+$endlist
+$component C4
+ SM*
+ C?
+ C1-1
+$endlist
+$component D1
+ LED-3MM
+ LED-5MM
+ LED-10MM
+ LED-0603
+ LED-0805
+ LED-1206
+ LEDV
+$endlist
+$component D2
+ LED-3MM
+ LED-5MM
+ LED-10MM
+ LED-0603
+ LED-0805
+ LED-1206
+ LEDV
+$endlist
+$component R1
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R2
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R3
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R4
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R5
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R6
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R7
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R8
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R9
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$endfootprintlist
+}

@@ -1,4 +1,4 @@
-update=07-04-2012 13:50:26
+update=09-04-2012 12:52:07
 version=1
 last_client=eeschema
 [cvpcb]
@@ -145,3 +145,5 @@ LibName31=capteurs
 LibName32=relays
 LibName33=relay
 LibName34=relay_finder
+LibName35=borniers
+LibName36=Relay-V23092
