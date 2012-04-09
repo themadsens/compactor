@@ -1,78 +1,81 @@
-# EESchema Netlist Version 1.1 created  07-04-2012 17:04:03
+# EESchema Netlist Version 1.1 created  09-04-2012 21:10:38
 (
- ( /4F7E1001 $noname$ C1 100_uF
+ ( /4F7E1001 C1V5 C1 100_uF
   ( 1 +12V )
   ( 2 GND )
  )
- ( /4F7F0CB0 $noname$ C2 100_uF
+ ( /4F7F0CB0 C1V5 C2 100_uF
   ( 1 VCC )
   ( 2 GND )
  )
- ( /4F800EFF $noname$ C3 22_pF
-  ( 1 N-000016 )
+ ( /4F800ED9 C1 C3 22_pF
+  ( 1 N-000023 )
   ( 2 GND )
  )
- ( /4F800ED9 $noname$ C4 22_pF
-  ( 1 N-000015 )
-  ( 2 GND )
- )
- ( /4F8015C8 $noname$ D1 ACT
+ ( /4F800EFF C1 C4 22_pF
   ( 1 N-000022 )
-  ( 2 N-000007 )
+  ( 2 GND )
  )
- ( /4F8015EA $noname$ D2 ALARM
-  ( 1 N-000026 )
-  ( 2 N-000008 )
+ ( /4F82BA93 D4 D1 1N4148
+  ( 1 /B- )
+  ( 2 N-000010 )
  )
- ( /4F800B0F DIP14 IC1 ATTINY24-P
+ ( /4F8015C8 LED-3MM D2 ACT
+  ( 1 N-000007 )
+  ( 2 N-000012 )
+ )
+ ( /4F8015EA LED-3MM D3 ALARM
+  ( 1 N-000020 )
+  ( 2 N-000013 )
+ )
+ ( /4F800B0F DIP-14__300 IC1 ATTINY24-P
   ( 1 VCC )
-  ( 2 N-000016 )
-  ( 3 N-000015 )
+  ( 2 N-000023 )
+  ( 3 N-000022 )
   ( 4 //RST_dW )
-  ( 5 N-000026 )
-  ( 6 N-000022 )
+  ( 5 N-000020 )
+  ( 6 N-000007 )
   ( 7 /MOSI )
   ( 8 /MISO )
   ( 9 /SCK )
-  ( 10 N-000006 )
-  ( 11 N-000021 )
-  ( 12 N-000024 )
-  ( 13 N-000030 )
+  ( 10 N-000001 )
+  ( 11 N-000016 )
+  ( 12 N-000017 )
+  ( 13 N-000019 )
   ( 14 GND )
  )
- ( /4F803C86 $noname$ K1 RELAY
-  ( 1 N-000023 )
-  ( 2 N-000028 )
-  ( 3 N-000027 )
-  ( 4 +12V )
-  ( 5 N-000025 )
+ ( /4F803C86 G5LE K1 RELAY
+  ( 1 N-000025 )
+  ( 2 +12V )
+  ( 3 N-000028 )
+  ( 4 ? )
+  ( 5 N-000008 )
  )
- ( /4F803CE1 $noname$ K2 CONN_3
-  ( 1 N-000027 )
-  ( 2 N-000028 )
-  ( 3 N-000023 )
- )
- ( /4F7FFBF7 $noname$ P1 12_V
+ ( /4F7FFBF7 Emb2_5 P1 12_V
   ( 1 +12V )
   ( 2 GND )
  )
- ( /4F800C49 $noname$ P2 BTN
-  ( 1 N-000024 )
+ ( /4F800C49 Emb2_5 P2 PUSH
+  ( 1 N-000017 )
   ( 2 GND )
  )
- ( /4F7FFC7F $noname$ P3 NMEA
-  ( 1 /NMEA_IN )
-  ( 2 GND )
+ ( /4F7FFC7F Emb2_5 P3 NMEA
+  ( 1 /A+ )
+  ( 2 /B- )
  )
- ( /4F802836 $noname$ P4 ACT
-  ( 1 N-000007 )
-  ( 2 N-000022 )
+ ( /4F831FA7 Emb2_5 P4 HORN
+  ( 1 N-000025 )
+  ( 2 N-000028 )
  )
- ( /4F802817 $noname$ P5 ALARM
-  ( 1 N-000008 )
-  ( 2 N-000026 )
+ ( /4F802836 Emb2_5 P5 ACT
+  ( 1 N-000012 )
+  ( 2 N-000007 )
  )
- ( /4F8011FD $noname$ P6 ISP_/_dW
+ ( /4F802817 Emb2_5 P6 ALARM
+  ( 1 N-000013 )
+  ( 2 N-000020 )
+ )
+ ( /4F8011FD PIN_ARRAY_5x2 P7 ISP_/_dW
   ( 1 /MOSI )
   ( 2 VCC )
   ( 3 ? )
@@ -84,73 +87,66 @@
   ( 9 /MISO )
   ( 10 GND )
  )
- ( /4F800A24 $noname$ Q1 BC547
-  ( 1 ? )
-  ( 2 N-000012 )
-  ( 3 N-000030 )
- )
- ( /4F8018EC $noname$ Q2 BC547
-  ( 1 ? )
-  ( 2 N-000011 )
-  ( 3 N-000002 )
- )
- ( /4F802239 $noname$ Q3 BC547
-  ( 1 ? )
-  ( 2 N-000010 )
-  ( 3 N-000025 )
- )
- ( /4F800A50 $noname$ R1 10k
-  ( 1 /NMEA_IN )
-  ( 2 N-000012 )
- )
- ( /4F800A75 $noname$ R2 10k
-  ( 1 N-000012 )
-  ( 2 GND )
- )
- ( /4F800A3A $noname$ R3 10k
-  ( 1 VCC )
-  ( 2 N-000030 )
- )
- ( /4F8018EA $noname$ R4 10k
-  ( 1 N-000021 )
-  ( 2 N-000011 )
- )
- ( /4F8018E8 $noname$ R5 10k
-  ( 1 N-000011 )
-  ( 2 GND )
- )
- ( /4F801655 $noname$ R6 470
-  ( 1 VCC )
-  ( 2 N-000007 )
- )
- ( /4F801677 $noname$ R7 470
-  ( 1 VCC )
-  ( 2 N-000008 )
- )
- ( /4F802237 $noname$ R8 10k
-  ( 1 N-000006 )
-  ( 2 N-000010 )
- )
- ( /4F80223B $noname$ R9 10k
-  ( 1 N-000010 )
-  ( 2 GND )
- )
- ( /4F802118 $noname$ SW1 PUSHBUTTON
+ ( /4F8018EC TO92 Q1 BC547
   ( 1 GND )
-  ( 2 N-000024 )
+  ( 2 N-000003 )
+  ( 3 N-000004 )
  )
- ( /4F7F0C97 $noname$ U1 LM7805
+ ( /4F802239 TO92 Q2 BC547
+  ( 1 GND )
+  ( 2 N-000015 )
+  ( 3 N-000008 )
+ )
+ ( /4F800A50 R1 R1 4k7
+  ( 1 /A+ )
+  ( 2 N-000010 )
+ )
+ ( /4F800A3A R1 R2 4k7
+  ( 1 VCC )
+  ( 2 N-000019 )
+ )
+ ( /4F8018EA R1 R3 10k
+  ( 1 N-000016 )
+  ( 2 N-000003 )
+ )
+ ( /4F801655 R1 R4 470
+  ( 1 VCC )
+  ( 2 N-000012 )
+ )
+ ( /4F8018E8 R1 R5 10k
+  ( 1 N-000003 )
+  ( 2 GND )
+ )
+ ( /4F801677 R1 R6 470
+  ( 1 VCC )
+  ( 2 N-000013 )
+ )
+ ( /4F802237 R1 R7 10k
+  ( 1 N-000001 )
+  ( 2 N-000015 )
+ )
+ ( /4F80223B R1 R8 10k
+  ( 1 N-000015 )
+  ( 2 GND )
+ )
+ ( /4F7F0C97 LM78XXV U1 LM7805
   ( GND GND )
   ( VI +12V )
   ( VO VCC )
  )
- ( /4F8023DC $noname$ X1 BUZZER
-  ( 1 +12V )
-  ( 2 N-000002 )
+ ( /4F82BCD2 DIP-6__300 U2 4N33
+  ( 1 N-000010 )
+  ( 2 /B- )
+  ( 4 GND )
+  ( 5 N-000019 )
  )
- ( /4F800E6D $noname$ X2 12_MHz
-  ( 1 N-000015 )
-  ( 2 N-000016 )
+ ( /4F8023DC BZR X1 BUZZER
+  ( 1 +12V )
+  ( 2 N-000004 )
+ )
+ ( /4F800E6D HC-49V X2 12_MHz
+  ( 1 N-000022 )
+  ( 2 N-000023 )
  )
 )
 *
@@ -174,6 +170,10 @@ $component C4
  C1-1
 $endlist
 $component D1
+ D?
+ S*
+$endlist
+$component D2
  LED-3MM
  LED-5MM
  LED-10MM
@@ -182,7 +182,7 @@ $component D1
  LED-1206
  LEDV
 $endlist
-$component D2
+$component D3
  LED-3MM
  LED-5MM
  LED-10MM
@@ -241,13 +241,6 @@ $component R7
  SM1206
 $endlist
 $component R8
- R?
- SM0603
- SM0805
- R?-*
- SM1206
-$endlist
-$component R9
  R?
  SM0603
  SM0805
