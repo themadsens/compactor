@@ -1,6 +1,6 @@
 local rs232 = require("luars232")
 
-local e, p = rs232.open("com8")
+local e, p = rs232.open("com6")
 if e ~= rs232.RS232_ERR_NOERROR then
 	-- handle error
 	out:write(string.format("can't open serial port '%s', error: '%s'\n",
