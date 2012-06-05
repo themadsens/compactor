@@ -27,6 +27,8 @@
  *
  */
 
+//FIXME Relay only activated on every other test button press
+
 #include <stdint.h>
 #include <avr/io.h>
 #include <avr/sleep.h>
@@ -58,7 +60,7 @@
 #define SRXD_PU    SBIT(PORTA, PORTA0)
 #define SRXD_IEN   SBIT(PCMSK0,PCINT0)
 #define SER_SCALE  1
-#define ISR_LEAD   4 // Determined empiric @ 12 MHz
+#define ISR_LEAD   4 // Determined empiric @ 12 MHz FIXME
 
 #elif defined (__AVR_ATmega16__)
 #define BUZZER_PIN SBIT(PORTB, PORTB1)
@@ -329,8 +331,8 @@ int main(void)
 	DBG_OUT    = 1;
 	DBG2_OUT   = 1;
 
-	ACT_PIN = 1;
-	LED_ON(0);
+	ACT_PIN = 0;
+	LED_ON(1);
 
 	// 1. Pin change interrupt enable
 	// 2. Waveform Generation is CTC (Clear timer on compare) 
@@ -410,9 +412,13 @@ int main(void)
 				buzzerOn = 0;
 			}
 			btnPressed = 0;
-			if (!ALARM_ON && armTestPressed && 0 == (upTime & 0x3)) { // brief flash every 2 sec
-				LED_ON(hsecCnt == 0 ? 1 : 0);
-			}
+		}
+		if (!ALARM_ON && armTestPressed && 0 == (upTime & 0x3)) {
+			// brief flash every 2 sec
+			if (hsecCnt == 0)
+				LED_ON(1);
+			else
+				LED_ON(0);
 		}
 
 		if (ALARM_ON && btnPressed == 950) {   // Mark re/arm with a beep
@@ -420,10 +426,26 @@ int main(void)
 			armTestPressed = 0;
 			alarmStart = 0;
 		}
-		if (!ALARM_ON && btnPressed == 1000) { // 10 second press cancels / re-arms alarm
+		if (!ALARM_ON && btnPressed == 1000) {
+			// 10 second press cancels / re-arms alarm
 			btnPressed = 0x8000; // Suspend button until released & pressed
 			buzzerOn = 0;
 		}
+
+		if (btnPressed == 50) {
+			// Only brief presses starts test mode
+			armTestPressed = 0;
+		}
+		if (btnPressed == 200) {
+			if (ALARM_ON) {
+				RELAY_PIN = 0; // Turn relay / horn off
+				buzzerOn = 0;
+			}
+			else
+				RELAY_PIN = 1; // Test relay / horn
+		}
+		else if (!ALARM_ON && !BUTTON_ON)
+			RELAY_PIN = 0;
 		
 		hsecCnt++;
 		if (hsecCnt >= 50)
@@ -435,8 +457,11 @@ int main(void)
 		 * Henceforth every 1/2 second
 		 */
 
-		if (0 == upTime) // Start beep
+		if (0 == upTime) { // End start buzzer / LED test
 			buzzerOn = 0;
+			LED_ON(0);
+			ACT_PIN = 1;
+		}
 		upTime++;
 
 		if ((upTime - alarmStart) >= AIS_TIMEOUT) {
@@ -447,16 +472,6 @@ int main(void)
 			// Cancel listening for test messages after 1 min
 			armTestPressed = 0;
 		}
-		if (BUTTON_ON && (upTime - armTestPressed) == 4) {
-			if (ALARM_ON) {
-				RELAY_PIN = 0; // Turn relay / horn off
-				buzzerOn = 0;
-			}
-			else
-				RELAY_PIN = 1; // Test relay / horn
-		}
-		else if (!ALARM_ON && !BUTTON_ON)
-			RELAY_PIN = 0;
 
 		// Isophase heartbeat
 		if ((upTime & 0x1) == 0) {
