@@ -29,19 +29,20 @@ while true do
     -- write with timeout 100 msec
     err, size = p:write("$AUz dabba dabba doo\r\n", 100)
     err, data_read, size = p:read(1, 2)
-    err, size = p:write("!AIVDM,1,1,,A,X1u?etPv2;0n:dDP,0*24\r\n", 100) -- Ord.Pos
+    err, size = p:write(" !AIVDM,1,1,,A,13bf9v90000IaApN8IF:<SvR0H9l,0*6A\r\n", 100) -- Ord.Pos
     assert(err == rs232.RS232_ERR_NOERROR)
     err, data_read, size = p:read(1, 2)
     cnt = cnt + 1
     if 1000 == cnt then
         cnt = 0
         io.write("|--")
-        err, size = p:write("!AIVDM,1,1,,B,1>M46P>P00Os:IfM5ITf4?w60<00,0*37", 100) -- sharp
+        err, size = p:write("  !AIVDM,1,1,,B,1>M46P>P00Os:IfM5ITf4?w60<00,0*37\r\n", 100) -- sharp
         assert(err == rs232.RS232_ERR_NOERROR)
-    elseif 0 == (cnt % 1) then
+    elseif 0 == (cnt % 10) then
 --      io.write("")
 --      err, size = p:write("!AIVDM,1,1,,B,1>M46P>P00Os:IfM5ITf4?w60<00,0*37", 100) -- sharp
-        err, size = p:write("!AIVDM,1,1,,B,1>M46P?P00Os:IdM5IaN4?vR1P00,0*21", 100) -- test
+--      err, size = p:write("!AIVDM,1,1,,B,1>M46P?P00Os:IdM5IaN4?vR1P00,0*21", 100) -- test
+        err, size = p:write(" !AIVDM,1,1,,B,1>M@sGgP020IWE6N8OiWSOwt1P00,0*02\r\n", 100) -- test Summertime
         assert(err == rs232.RS232_ERR_NOERROR)
     end
     io.write("\b.")
