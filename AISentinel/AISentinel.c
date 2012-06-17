@@ -102,8 +102,6 @@
 // Maintained by timer interrupt. 
 uint16_t upTime;
 
-char AISLead[] PROGMEM = "\n!AIVDM,1,1,,\a,";
-
 // Nonzero is active alarm. 
 // Updated on every message
 // Zeroed when no message seen in 10 minutes
@@ -113,32 +111,25 @@ uint16_t alarmStart = 0;
 
 void alarmCond(void);
 
-#define AIST_LEAD_MAX 15
-#define AIST_CHECK_NAVSTATE 20
-#define AIST_MMSI_ABOVE 32
-#define AIST_MMSI_BELOW 40
+#define AIST_LEAD_MAX 14
+#define AIST_MMSI_CHECK 40 // Must divide with 8
+#define AIST_CHECK_NAVSTATE 30
 #define AIST_MMSI_MASK  0x7
 uint8_t aisState; // Counter in AISLead or state
 uint16_t armTestPressed = 0;
 
-/*
- * MMSI High 979999999 == 0b 1110 100110 100110 011100 111111 11
- * MMSI Low  970000000 == 0b 1110 011101 000100 000110 100000 00
- * NEAT: Two LSB bits with navstate turns out as dont cares :-)
- */
-//                          1110 100110 100110 011100 111111
-uint8_t MMSIHi[] PROGMEM = {0x0E,  0x26,  0x26,  0x1C,  0x3F};
-//                          1110 011101 000100 000110 100000
-uint8_t MMSILo[] PROGMEM = {0x0E,  0x1D,  0x04,  0x06,  0x20};
+char AISLead[] PROGMEM = "!AIVDM,1,1,,\a,1";
+#define MMSI_HIGH 979999999
+#define MMSI_LOW  970000000
+uint32_t MmsiNo;
 
 void AISDecode(int ch)
 {
-	register uint8_t t;
-	register uint8_t num = ch - (ch > 'W' ? 56 : 48);
+	volatile uint32_t num = ch - (ch > 'W' ? 56 : 48);
 	if (0 == (aisState & AIST_MMSI_MASK)) // First char in sequence 
 		num &= 0xf;                        // Clear repeat indicator
 	if (aisState < AIST_LEAD_MAX) {
-			char test = pgm_read_byte(&AISLead[aisState]);
+		char test = pgm_read_byte(&AISLead[aisState]);
 		if (test == '\a' || ch == test) {
 			aisState++;
 		}
@@ -154,43 +145,34 @@ void AISDecode(int ch)
 	}
 	else if (aisState == AIST_LEAD_MAX) {
 		if (ch == '1') {     // Type 01: Position update
-			aisState = AIST_MMSI_ABOVE; // Pick one
+			aisState = AIST_MMSI_CHECK;
+			MmsiNo = 0;
 		}
 		else {
 			aisState = 0;
 		}
 	}
-	else if ((aisState & ~AIST_MMSI_MASK) == AIST_MMSI_ABOVE) {
-		t = pgm_read_byte(&MMSILo[aisState - AIST_MMSI_ABOVE]);
-		if (num > t) {
-			aisState = aisState - AIST_MMSI_ABOVE + AIST_MMSI_BELOW;
-         AISDecode(ch);         // Must be below max as well
+	else if (aisState == AIST_MMSI_CHECK) {
+		MmsiNo = (num & 0xF) << 26;
+		aisState++;
+	}
+	else if (aisState == AIST_MMSI_CHECK + 5) {
+		MmsiNo |= num >> 4;
+		if (MmsiNo >= MMSI_LOW && MmsiNo <= MMSI_HIGH) {
+			if ((num & 0xf) != 15 || armTestPressed) // Test message only on
+				alarmCond();                          // recent button press
+			else
+				DBG2_PIN ^= 1;
 		}
-		else if (ch < t)
-			aisState = 0;
-		else
-			aisState++;
-	}
-	else if ((aisState & ~AIST_MMSI_MASK) == AIST_MMSI_BELOW) {
-		t = pgm_read_byte(&MMSIHi[aisState - AIST_MMSI_BELOW]);
-		if (ch > t)
-			aisState = 0;
-		else
-			aisState++;
-	}
-	else if (aisState == AIST_CHECK_NAVSTATE) {
-		if ((num & 0xf) != 15 || armTestPressed) // Test message only on
-			alarmCond();                             // recent button press
-		else
-			DBG2_PIN ^= 1;
 		aisState = 0; // Start over
+	}
+	else if ((aisState & ~AIST_MMSI_MASK) == AIST_MMSI_CHECK) {
+		MmsiNo |= num << (((AIST_MMSI_CHECK + 5 - aisState) * 6) - 4);
+		aisState++;
 	}
 	else
 		aisState = 0; // Start over
 
-	if (aisState == AIST_MMSI_ABOVE + 5 || aisState == AIST_MMSI_BELOW + 5) {
-		aisState = AIST_CHECK_NAVSTATE;
-	}
 }
 
 // Timer0 ISR
@@ -468,8 +450,8 @@ int main(void)
 			// Cancel / re-arm alarm if nothing seen in 10 min.
 			alarmStart = 0;
 		}
-		if ((upTime - armTestPressed) >= 120) {
-			// Cancel listening for test messages after 1 min
+		if ((upTime - armTestPressed) >= 600) {
+			// Cancel listening for test messages after 5 min
 			armTestPressed = 0;
 		}
 
