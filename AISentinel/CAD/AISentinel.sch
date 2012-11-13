@@ -1,4 +1,4 @@
-EESchema Schematic File Version 2  date 22-04-2012 23:03:51
+EESchema Schematic File Version 2  date 01-11-2012 14:08:30
 LIBS:power
 LIBS:device
 LIBS:transistors
@@ -40,7 +40,7 @@ $Descr A4 11700 8267
 encoding utf-8
 Sheet 1 1
 Title "AISentinel"
-Date "22 apr 2012"
+Date "1 nov 2012"
 Rev "0"
 Comp "© MadsenSoft"
 Comment1 ""
@@ -674,7 +674,7 @@ L R R1
 U 1 1 4F800A50
 P 2800 4100
 F 0 "R1" V 2880 4100 50  0000 C CNN
-F 1 "1k" V 2800 4100 50  0000 C CNN
+F 1 "470" V 2800 4100 50  0000 C CNN
 	1    2800 4100
 	0    -1   -1   0   
 $EndComp
