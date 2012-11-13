@@ -23,29 +23,31 @@
 
 #if defined (__AVR_ATtiny13__)
 
-#define CPU_FREQ (F_CPU / 8)
-#define ON_PIN SBIT(PINB,  PB5)
-#define ON_PU  SBIT(PORTB, PB5)
+#define CKDIV 8
+#define CPU_FREQ (F_CPU / CKDIV)
+#define ON_PIN SBIT(PINB,  PB3)
+#define ON_PU  SBIT(PORTB, PB3)
 #define UP_PIN SBIT(PINB,  PB4)
 #define UP_PU  SBIT(PORTB, PB4)
-#define DN_PIN SBIT(PINB,  PB3)
-#define DN_PU  SBIT(PORTB, PB3)
-#define ON_OUT SBIT(PINB,  PB2)
+#define DN_PIN SBIT(PINB,  PB5)
+#define DN_PU  SBIT(PORTB, PB5)
+#define ON_OUT SBIT(PORTB, PB2)
 #define ON_EN  SBIT(DDRB,  PB2)
-#define UP_OUT SBIT(PINB,  PB1)
+#define UP_OUT SBIT(PORTB, PB1)
 #define UP_EN  SBIT(DDRB,  PB1)
-#define DN_OUT SBIT(PINB,  PB0)
+#define DN_OUT SBIT(PORTB, PB0)
 #define DN_EN  SBIT(DDRB,  PB0)
 #else
 #error "Must be a ATtiny13"
 #endif
 
-#define TIMER0_TOP  (CPU_FREQ  / 8 / 1000 )
+#define PRESCALE 8
+#define TIMER0_TOP  (CPU_FREQ / PRESCALE / 1000 )
 
 #include <util/delay.h>
 
 // Maintained by timer interrupt. 
-uint16_t upTime = 0;
+int16_t upTime = 0;
 uint16_t boot = 1;
 
 
@@ -54,16 +56,16 @@ ISR(TIM0_COMPA_vect)
     return;
 }
 
-uint8_t secCnt = 0;
-uint8_t btnPressed = 0;
+uint16_t secCnt = 0;
+uint16_t btnPressed = 0;
 int main(void)
 {
 	ON_PU = 1;
 	UP_PU = 1;
 	DN_PU = 1;
 	ON_EN = 1;
-	UP_EN = 1;
-	DN_EN = 1;
+	UP_EN = 0;
+	DN_EN = 0;
 
 	ON_OUT = 0; // Light up for half a sec on boot (plugged in)
 
@@ -76,7 +78,7 @@ int main(void)
 	OCR0A =  TIMER0_TOP;   // 3.
 
 	set_sleep_mode(SLEEP_MODE_IDLE);
-   sei();                       // Rock & roll
+	sei();                       // Rock & roll
 	while(1) {
 		// Rest here until next timer overrun
 		sleep_enable();
@@ -85,15 +87,36 @@ int main(void)
 
 		secCnt++;
 
-		if (!upTime) {
+		if (upTime <= 0) {
+			UP_OUT = 0;
+			DN_OUT = 0;
+			UP_EN = 0;
+			DN_EN = 0;
 
-			if (0 == ON_PIN)
+			if (upTime < 0 && 0 == ON_PIN)
+				continue; // Wait for button release
+
+			if (upTime == -2) {
+				// Going ON
+				upTime = 1;
+				UP_OUT = 0;
+				DN_OUT = 0;
+				UP_EN = 1;
+				DN_EN = 1;
+				btnPressed = 0;
+				continue;
+			}
+
+			upTime = 0;
+
+			if (0 == ON_PIN && btnPressed < 9999)
 				btnPressed++;
 			else
 				btnPressed = 0;
 			if (btnPressed > 50) {
 				boot = 0;
-				upTime = 1;
+				upTime = -2;
+				ON_OUT = 0; // Lit the led
 			}
 			else if (boot && secCnt == 500) {
 				ON_OUT = 1;
@@ -104,33 +127,52 @@ int main(void)
 			continue;
 		}
 
-		ON_OUT = 0; // Lit the led
 
-		if (0 == UP_PIN || 0 == DN_PIN)
-			btnPressed++;
+		if (0 == UP_PIN || 0 == DN_PIN || 0 == ON_PIN) {
+			if (btnPressed < 9999)
+				btnPressed++;
+		}
 		else
 			btnPressed = 0;
 
 		if (btnPressed > 50) {
 			if (0 == UP_PIN)
 				UP_OUT = 1;
-			else
+			else if (0 == DN_PIN)
 				DN_OUT = 1;
+			upTime = 1;
+			if (0 == ON_PIN && btnPressed > 1000) {
+				upTime = -1; // Off
+				ON_OUT = 1; // Off the led
+				continue;
+			}
 		}
 		else {
-			UP_OUT = 1;
-			DN_OUT = 1;
+			UP_OUT = 0;
+			DN_OUT = 0;
 		}
 
-		if (1000 == secCnt)
+		if (secCnt >= 500 && upTime > 50)
+			ON_OUT = 0; // Blink the led
+
+		if (secCnt >= 1000)
 			secCnt = 0;
 		else
 			continue;
 
 		upTime++;
+		//DN_OUT ^= 1;
 
-		if (60 == upTime)
+
+		if (upTime >= 60) {
 			upTime = 0; // Off
+			ON_OUT = 1; // Off the led
+		}
+		else if (upTime > 50) {
+			ON_OUT = 1; // Blink the led
+		}
+		else
+			ON_OUT = 0; // Lit the led
 	}
 }
 
