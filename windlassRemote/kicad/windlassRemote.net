@@ -1,0 +1,270 @@
+# EESchema Netlist Version 1.1 created  11-10-2012 14:39:01
+(
+ ( /5076BAF3 $noname  R5 10k {Lib=R}
+  (    1 N-000017 )
+  (    2 GND )
+ )
+ ( /5076BAF1 $noname  Q2 BC547 {Lib=NPN}
+  (    1 GND )
+  (    2 N-000017 )
+  (    3 N-000018 )
+ )
+ ( /5076BAF0 $noname  R3 10k {Lib=R}
+  (    1 N-000014 )
+  (    2 N-000017 )
+ )
+ ( /5076BAEF $noname  Q4 P9530N {Lib=MOSFET_P}
+  (    D N-000006 )
+  (    G N-000005 )
+  (    S GND )
+ )
+ ( /5076BAEE $noname  R7 10k {Lib=R}
+  (    1 N-000018 )
+  (    2 N-000005 )
+ )
+ ( /5076BAED $noname  R9 10k {Lib=R}
+  (    1 +12V )
+  (    2 N-000005 )
+ )
+ ( /5076BAEA DOWN  P3 DOWN {Lib=CONN_1}
+  (    1 N-000006 )
+ )
+ ( /5076BA86 UP  P2 UP {Lib=CONN_1}
+  (    1 N-000007 )
+ )
+ ( /5076B96F $noname  R8 10k {Lib=R}
+  (    1 +12V )
+  (    2 N-000008 )
+ )
+ ( /5076B956 $noname  R6 10k {Lib=R}
+  (    1 N-000011 )
+  (    2 N-000008 )
+ )
+ ( /5076B906 $noname  Q3 P9530N {Lib=MOSFET_P}
+  (    D N-000007 )
+  (    G N-000008 )
+  (    S GND )
+ )
+ ( /5076B63F $noname  SW3 DOWN {Lib=SW_PUSH}
+  (    1 GND )
+  (    2 N-000012 )
+ )
+ ( /5076B62D $noname  SW2 UP {Lib=SW_PUSH}
+  (    1 GND )
+  (    2 N-000002 )
+ )
+ ( /5076B597 $noname  R1 10k {Lib=R}
+  (    1 VCC )
+  (    2 N-000001 )
+ )
+ ( /5076B572 ON  D1 LED {Lib=LED}
+  (    1 N-000001 )
+  (    2 N-000015 )
+ )
+ ( /5076B2E8 $noname  SW1 ON {Lib=SW_PUSH}
+  (    1 GND )
+  (    2 N-000013 )
+ )
+ ( /5076B152 $noname  U1 LM7833 {Lib=LM7805}
+  (  GND GND )
+  (   VI +12V )
+  (   VO VCC )
+ )
+ ( /5076B153 $noname  C1 100_uF {Lib=CAPAPOL}
+  (    1 +12V )
+  (    2 GND )
+ )
+ ( /5076B151 $noname  C2 100_uF {Lib=CAPAPOL}
+  (    1 VCC )
+  (    2 GND )
+ )
+ ( /5076B14F $noname  P1 12_V {Lib=CONN_2}
+  (    1 +12V )
+  (    2 GND )
+ )
+ ( /5076B0E4 $noname  R2 10k {Lib=R}
+  (    1 N-000009 )
+  (    2 N-000010 )
+ )
+ ( /5076B0E3 $noname  Q1 BC547 {Lib=NPN}
+  (    1 GND )
+  (    2 N-000010 )
+  (    3 N-000011 )
+ )
+ ( /5076B0E1 $noname  R4 10k {Lib=R}
+  (    1 N-000010 )
+  (    2 GND )
+ )
+ ( /5076AE0A DIP8  IC1 ATTINY13-P {Lib=ATTINY13-P}
+  (    1 N-000012 )
+  (    2 N-000013 )
+  (    3 N-000002 )
+  (    4 GND )
+  (    5 N-000014 )
+  (    6 N-000009 )
+  (    7 N-000015 )
+  (    8 VCC )
+ )
+)
+*
+{ Allowed footprints by component:
+$component R5
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R3
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R7
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R9
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R8
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R6
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R1
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component D1
+ LED-3MM
+ LED-5MM
+ LED-10MM
+ LED-0603
+ LED-0805
+ LED-1206
+ LEDV
+$endlist
+$component C1
+ CP*
+ SM*
+$endlist
+$component C2
+ CP*
+ SM*
+$endlist
+$component R2
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R4
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$endfootprintlist
+}
+{ Pin List by Nets
+Net 1 "" ""
+ D1 1
+ R1 2
+Net 2 "" ""
+ SW2 2
+ IC1 3
+Net 3 "GND" "GND"
+ C1 2
+ P1 2
+ C2 2
+ U1 GND
+ IC1 4
+ R5 2
+ Q4 S
+ Q2 1
+ SW3 1
+ SW1 1
+ Q3 S
+ R4 2
+ SW2 1
+ Q1 1
+Net 4 "VCC" "VCC"
+ IC1 8
+ C2 1
+ R1 1
+ U1 VO
+Net 5 "" ""
+ R9 2
+ Q4 G
+ R7 2
+Net 6 "" ""
+ Q4 D
+ P3 1
+Net 7 "" ""
+ Q3 D
+ P2 1
+Net 8 "" ""
+ R6 2
+ R8 2
+ Q3 G
+Net 9 "" ""
+ IC1 6
+ R2 1
+Net 10 "" ""
+ R2 2
+ R4 1
+ Q1 2
+Net 11 "" ""
+ Q1 3
+ R6 1
+Net 12 "" ""
+ IC1 1
+ SW3 2
+Net 13 "" ""
+ SW1 2
+ IC1 2
+Net 14 "" ""
+ IC1 5
+ R3 1
+Net 15 "" ""
+ D1 2
+ IC1 7
+Net 16 "+12V" "+12V"
+ R8 1
+ U1 VI
+ C1 1
+ P1 1
+ R9 1
+Net 17 "" ""
+ R3 2
+ Q2 2
+ R5 1
+Net 18 "" ""
+ R7 1
+ Q2 3
+}
+#End
