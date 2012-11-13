@@ -1,0 +1,136 @@
+# EESchema Netlist Version 1.1 created  23-04-2012 16:55:30
+(
+ ( /4F7E1001 C1V5 C1 100_uF
+  ( 1 +12V )
+  ( 2 GND )
+ )
+ ( /4F7F0CB0 C1V5 C2 100_uF
+  ( 1 VCC )
+  ( 2 GND )
+ )
+ ( /4F800ED9 C1 C3 22_pF
+  ( 1 N-000015 )
+  ( 2 GND )
+ )
+ ( /4F800EFF C1 C4 22_pF
+  ( 1 N-000014 )
+  ( 2 GND )
+ )
+ ( /4F8015C8 LED-3MM D1 ACT
+  ( 1 N-000004 )
+  ( 2 N-000005 )
+ )
+ ( /4F8015EA LED-3MM D2 ALARM
+  ( 1 N-000003 )
+  ( 2 N-000016 )
+ )
+ ( /4F800B0F DIP-14__300 IC1 ATTINY24-P
+  ( 1 VCC )
+  ( 2 N-000015 )
+  ( 3 N-000014 )
+  ( 4 //RST_dW )
+  ( 5 N-000016 )
+  ( 6 N-000005 )
+  ( 7 /MOSI )
+  ( 8 /MISO )
+  ( 9 /SCK )
+  ( 10 N-000018 )
+  ( 11 N-000008 )
+  ( 12 N-000009 )
+  ( 13 N-000017 )
+  ( 14 GND )
+ )
+ ( /4F7FFBF7 Emb2_5 P1 12_V
+  ( 1 +12V )
+  ( 2 GND )
+ )
+ ( /4F956674 PIN_ARRAY_4x1 P2 CONN_4
+  ( 1 N-000017 )
+  ( 2 N-000009 )
+  ( 3 N-000008 )
+  ( 4 N-000018 )
+ )
+ ( /4F8011FD PIN_ARRAY_5x2 P3 ISP_/_dW
+  ( 1 /MOSI )
+  ( 2 VCC )
+  ( 3 ? )
+  ( 4 GND )
+  ( 5 //RST_dW )
+  ( 6 GND )
+  ( 7 /SCK )
+  ( 8 GND )
+  ( 9 /MISO )
+  ( 10 GND )
+ )
+ ( /4F801655 R4 R1 470
+  ( 1 VCC )
+  ( 2 N-000004 )
+ )
+ ( /4F801677 R4 R2 470
+  ( 1 VCC )
+  ( 2 N-000003 )
+ )
+ ( /4F7F0C97 LM78XXV U1 LM7805
+  ( GND GND )
+  ( VI +12V )
+  ( VO VCC )
+ )
+ ( /4F800E6D HC-49V X1 12_MHz
+  ( 1 N-000014 )
+  ( 2 N-000015 )
+ )
+)
+*
+{ Allowed footprints by component:
+$component C1
+ CP*
+ SM*
+$endlist
+$component C2
+ CP*
+ SM*
+$endlist
+$component C3
+ SM*
+ C?
+ C1-1
+$endlist
+$component C4
+ SM*
+ C?
+ C1-1
+$endlist
+$component D1
+ LED-3MM
+ LED-5MM
+ LED-10MM
+ LED-0603
+ LED-0805
+ LED-1206
+ LEDV
+$endlist
+$component D2
+ LED-3MM
+ LED-5MM
+ LED-10MM
+ LED-0603
+ LED-0805
+ LED-1206
+ LEDV
+$endlist
+$component R1
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$component R2
+ R?
+ SM0603
+ SM0805
+ R?-*
+ SM1206
+$endlist
+$endfootprintlist
+}

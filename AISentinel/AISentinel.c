@@ -116,9 +116,11 @@ void alarmCond(void);
 #define AIST_CHECK_NAVSTATE 30
 #define AIST_MMSI_MASK  0x7
 uint8_t aisState; // Counter in AISLead or state
+uint8_t actTimer; // Minimum activity light pulse width
+uint8_t testTimer; // Flash red when test message received
 uint16_t armTestPressed = 0;
 
-char AISLead[] PROGMEM = "!AIVDM,1,1,,\a,1";
+const char AISLead[] PROGMEM = "!AIVDM,1,1,,\a,1";
 #define MMSI_HIGH 979999999
 #define MMSI_LOW  970000000
 uint32_t MmsiNo;
@@ -137,10 +139,10 @@ void AISDecode(int ch)
 			if (aisState > 10)
 				_NOP();
 			aisState = 0;
-			ACT_PIN = 1;                 // Activity light
 		}
 		if (aisState > 3) {
-			ACT_PIN = 0;                 // Activity light
+			ACT_PIN = 0;                 // Activity light ON
+			actTimer = 1;
 		}
 	}
 	else if (aisState == AIST_LEAD_MAX) {
@@ -161,8 +163,10 @@ void AISDecode(int ch)
 		if (MmsiNo >= MMSI_LOW && MmsiNo <= MMSI_HIGH) {
 			if ((num & 0xf) != 15 || armTestPressed) // Test message only on
 				alarmCond();                          // recent button press
-			else
-				DBG2_PIN ^= 1;
+			else {
+				LED_ON(1);
+				testTimer = 1;
+			}
 		}
 		aisState = 0; // Start over
 	}
@@ -377,12 +381,10 @@ int main(void)
 			if (btnPressed == 5) {
 				if (!ALARM_ON) {
 					// Test buzzer / led / horn -- Toggle Sart test armed mode
-					buzzerOn = 1;
 					armTestPressed = armTestPressed ? 0 : (upTime ?: 1);
 				}
 				else { 
-					armTestPressed = (upTime ?: 1);
-					buzzerOn ^= 1;
+					buzzerOn = 0;
 				}
 				hsecCnt = 0;          // Synchronize tone alternate interval
 			}
@@ -390,8 +392,9 @@ int main(void)
 				btnPressed++;
 		}
 		else {
-			if (!ALARM_ON && upTime > 0) {
+			if (!ALARM_ON && upTime > 0 && testTimer == 0) {
 				buzzerOn = 0;
+				RELAY_PIN = 0;
 			}
 			btnPressed = 0;
 		}
@@ -418,16 +421,39 @@ int main(void)
 			// Only brief presses starts test mode
 			armTestPressed = 0;
 		}
+		if (btnPressed == 100 && !ALARM_ON) {
+			buzzerOn = 1;
+		}
 		if (btnPressed == 200) {
-			if (ALARM_ON) {
+			if (ALARM_ON)
 				RELAY_PIN = 0; // Turn relay / horn off
-				buzzerOn = 0;
-			}
 			else
 				RELAY_PIN = 1; // Test relay / horn
 		}
-		else if (!ALARM_ON && !BUTTON_ON)
-			RELAY_PIN = 0;
+
+		if (actTimer < 100)
+			actTimer++;
+		if (actTimer > 5 && aisState == 0)
+			ACT_PIN = 1;                 // Activity light OFF
+
+		if (testTimer > 0) {
+			if (testTimer < 200)
+				testTimer++;
+			if (testTimer == 5 || testTimer == 55 || testTimer == 105)
+				LED_ON(0);                // Ack blink OFF
+			else if (testTimer == 50 || testTimer == 100)
+				LED_ON(1);                // Ack blink ON 
+			if (testTimer == 100) {
+				hsecCnt = 0;
+				buzzerOn = 1;
+			}
+			else if (testTimer == 150) {
+				testTimer = 0;
+				buzzerOn = 0;
+			}
+		}
+
+
 		
 		hsecCnt++;
 		if (hsecCnt >= 50)
