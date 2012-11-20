@@ -14,16 +14,9 @@
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include "util.h"
+#include "MultiMon.h"
 
 typedef unsigned char byte;
-
-// Hardware definitions. Thse are all on port B
-#define LCD_PORT	PORTB
-#define LCD_DDR 	DDRB
-#define PIN_CS    4   // ~Chip select
-#define PIN_CLOCK 7   // Clock
-#define PIN_DATA  5   // Data
-#define PIN_RESET 6   // ~Reset
 
 
 // Enable subsystems
@@ -31,9 +24,9 @@ typedef unsigned char byte;
 #define EPSON_EN_CIRCLE      1
 #define EPSON_EN_RECTANGLE   1
 #define EPSON_EN_TEXT        1
-#define EPSON_EN_TEXT_SMALL  1
+#define EPSON_EN_TEXT_SMALL  0
 #define EPSON_EN_TEXT_MEDIUM 1
-#define EPSON_EN_TEXT_LARGE  1
+#define EPSON_EN_TEXT_LARGE  0
 
 // Command definitions
 #define DISON   0xAF // Display on
@@ -86,6 +79,12 @@ typedef unsigned char byte;
 // 12-bit color definitions
 #define WHITE   0xFFF
 #define BLACK   0x000
+#define GRAY1   0x111
+#define GRAY2   0x222
+#define GRAY3   0x333
+#define GRAY12  0xCCC
+#define GRAY13  0xDDD
+#define GRAY14  0xEEE
 #define RED     0xF00
 #define GREEN   0x0F0
 #define BLUE    0x00F
@@ -105,16 +104,8 @@ void WriteSpiData(byte data);
 void LCDClearScreen(void);
 void LCDSetPixel(const byte x, const byte y, const int color);
 
-#if (EPSON_EN_LINE == 1) || (EPSON_EN_RECTANGLE == 1)
-  void LCDSetLine(byte x1, byte y1, byte x2, byte y2, int color);
-#endif
-
 #if EPSON_EN_RECTANGLE == 1
   void LCDSetRect(byte x0, byte y0, byte x1, byte y1, byte fill, int color);
-#endif
-
-#if EPSON_EN_CIRCLE == 1
-  void LCDSetCircle(byte x0, byte y0, int radius, int color);
 #endif
 
 #if EPSON_EN_TEXT == 1
@@ -124,12 +115,6 @@ void LCDSetPixel(const byte x, const byte y, const int color);
                   const byte size, 
                   const int fColor, 
                   const int bColor);
-  void LCDPutStr(const char *pString, 
-                 const byte x, 
-                 const byte y, 
-                 const int fontSize, 
-                 const int fColor, 
-                 const int bColor);
                
 
 
