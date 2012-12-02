@@ -14,7 +14,7 @@
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include "util.h"
-#include "MultiMon.h"
+#include "hardware.h"
 
 typedef unsigned char byte;
 
@@ -24,9 +24,11 @@ typedef unsigned char byte;
 #define EPSON_EN_CIRCLE      1
 #define EPSON_EN_RECTANGLE   1
 #define EPSON_EN_TEXT        1
-#define EPSON_EN_TEXT_SMALL  0
+#undef  EPSON_EN_TEXT_SMALL
 #define EPSON_EN_TEXT_MEDIUM 1
-#define EPSON_EN_TEXT_LARGE  0
+#undef  EPSON_EN_TEXT_LARGE
+
+#include "LCD.h"
 
 // Command definitions
 #define DISON   0xAF // Display on
@@ -86,11 +88,14 @@ typedef unsigned char byte;
 #define GRAY13  0xDDD
 #define GRAY14  0xEEE
 #define RED     0xF00
+#define L_RED   0xF22
 #define GREEN   0x0F0
+#define L_GREEN 0x2F2
 #define BLUE    0x00F
+#define L_BLUE  0x22F
 #define CYAN    0x0FF
 #define MAGENTA 0xF0F
-#define YELLOW  0xFF0
+#define YELLOW  0xEE0
 #define BROWN   0xB22
 #define ORANGE  0xFA0
 #define PINK    0xF6A

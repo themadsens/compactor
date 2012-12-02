@@ -1,29 +1,38 @@
 /**
  * Screen defs
  */
+#ifndef _Screen_h__
+#define _Screen_h__
 
-#include <avrx.h>
+#include <avr/io.h>
+
+enum SCREEN {SCREEN_NAV = 0, SCREEN_BATT, SCREEN_CNFG , SCREEN_NUM};
+extern uint8_t curScreen;
+
+#define CnvKt2Ms_I(N, D) ((N * 1852 / 3600) / D)
+#define CnvKt2Ms_F(N, D) ((N * 1852 / 3600) % D)
 
 extern int16_t   Nav_AWA;     // In degrees bows clockwise +-180
 extern uint16_t  Nav_AWS;     // In 1/10ths of a knot
 extern int16_t   Nav_ATMP;    // In 1/10ths of a degree +-
 extern uint16_t  Nav_DBS;     // In 1/100ths m (cm up to 650m)
-extern int16_t   Nav_WTMP     // In 1/10ths of a degree +-
+extern int16_t   Nav_WTMP;    // In 1/10ths of a degree +-
 extern uint16_t  Nav_STW;     // In 1/100ths of a knot
 extern int16_t   Nav_AWA;     // In degrees 0..360
+extern int16_t   Nav_SUM;
 
-#define NAV_WIND  0x01
-#define NAV_DEPTH 0x02
-#define NAV_HDG   0x04
+#define NAV_WIND  0
+#define NAV_DEPTH 1
+#define NAV_HDG   2
 extern uint8_t   Nav_redraw;
 
-#define BATT_VHOUSE  0x01
-#define BATT_VENGINE 0x02
-#define BATT_VSOLAR  0x04
-#define BATT_IHOUSE  0x08
-#define BATT_ISOLAR  0x10
-#define BATT_HOUSEAH 0x20
-#define BATT_TEMP    0x40
+#define BATT_VHOUSE  0
+#define BATT_VENGINE 1
+#define BATT_VSOLAR  2
+#define BATT_IHOUSE  3
+#define BATT_ISOLAR  4
+#define BATT_HOUSEAH 5
+#define BATT_TEMP    6
 extern uint8_t  Batt_redraw;
 
 extern uint16_t  Batt_VHOUSE;     // In 1/100 Volt
@@ -36,5 +45,17 @@ extern uint16_t  Batt_TEMP;       // In 1/10 C
 
 extern uint8_t LED_ActivityMask; // Set bits in this for the UI
 
-#define ScreenButtonTick() AvrXSendMessage(ScreenQueue, _ScrnButtonTick)
-#define ScreenUpdate()     AvrXSendMessage(ScreenQueue, _ScreenUpd)
+extern uint16_t Cnfg_AWSFAC EEPROM;    // in 1/1000
+extern uint16_t Cnfg_STWFAC EEPROM;    // in 1/1000
+extern uint16_t Cnfg_DBSOFF EEPROM;    // in cm
+extern uint16_t Cnfg_AWAOFF EEPROM;    // in deg
+extern uint16_t Cnfg_HOUSEAH EEPROM;   // in AH
+extern uint16_t Cnfg_PEUKERT EEPROM;   // in 1/1000
+extern uint8_t SatSNR[12];
+extern uint8_t SatHDOP;    // 5..30 or so
+extern uint8_t SatMODE;    // 1: No fix, 2: 2D fix, 3: 3D fix
+
+void ScreenButtonTick(void);
+void ScreenUpdate(void);
+
+#endif

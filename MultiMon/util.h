@@ -26,9 +26,9 @@ struct bits {
   u8 b5:1;
   u8 b6:1;
   u8 b7:1;
-} __attribute__((__packed__));
+} __attribute__((__packed__)) __attribute__((__may_alias__));
 
-#define SBIT_(port,pin) ((*(volatile struct bits*)&port).b##pin)
+#define SBIT_(port,pin) (((volatile struct bits*)&port)->b##pin)
 #define SBIT(port,pin) SBIT_(port,pin)
 
 #define BSET(port,pin) SBIT_(port,pin) = 1
@@ -36,5 +36,11 @@ struct bits {
 
 #define BIT(b) (1 << (b))
 
+inline i16 muldiv(i16 a, i16 b, i16 c) {
+    return (i16) a * (i32) b / c;
+}
+
 void delay_ms(int x);
+struct TimerControlBlock;
+struct TimerControlBlock *processTimer(void);
 #endif

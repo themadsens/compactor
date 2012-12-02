@@ -58,10 +58,10 @@
 // The Arduino signals that control the LCD are defined in Epson.h
 // Current definitons are:
 // Hardware definitions
-// #define PIN_CS    0x01   // ~Chip select
-// #define PIN_CLOCK 0x02   // Clock
-// #define PIN_DATA  0x04   // Data
-// #define PIN_RESET 0x08   // ~Reset
+// #define LCD_PIN_CS    0x01   // ~Chip select
+// #define LCD_PIN_CLOCK 0x02   // Clock
+// #define LCD_PIN_DATA  0x04   // Data
+// #define LCD_PIN_RESET 0x08   // ~Reset
 //
 // The important thing to note is that you CANNOT read from the LCD!
 //
@@ -81,6 +81,7 @@
 // Include Files
 // **************************************
 #include "epson.h"
+#include "util.h"
 
 #define WritePixelData(color) do {  \
             WriteSpiData(((color) >> 8) & 0x0F); \
@@ -102,33 +103,33 @@ void WriteSpiCommand(byte command) {
   byte i;
   
   // Enable chip
-  BCLR(LCD_PORT, PIN_CLOCK);
-  BCLR(LCD_PORT, PIN_CS);
+  BCLR(LCD_PORT, LCD_PIN_CLOCK);
+  BCLR(LCD_PORT, LCD_PIN_CS);
   
   // CLock out the zero for a command
-  BCLR(LCD_PORT, PIN_DATA);
-  BSET(LCD_PORT,  PIN_CLOCK);
+  BCLR(LCD_PORT, LCD_PIN_DATA);
+  BSET(LCD_PORT,  LCD_PIN_CLOCK);
   
   // Clock out the 8 bits MSB first  
   for (i=0; i<8; i++) {
 
-    BCLR(LCD_PORT, PIN_CLOCK);
+    BCLR(LCD_PORT, LCD_PIN_CLOCK);
 
     // Set the data bit
     if (command & 0x80) {
-      BSET(LCD_PORT, PIN_DATA);
+      BSET(LCD_PORT, LCD_PIN_DATA);
     } else {
-      BCLR(LCD_PORT, PIN_DATA);
+      BCLR(LCD_PORT, LCD_PIN_DATA);
     }
     // Toggle the clock
-    BSET(LCD_PORT,  PIN_CLOCK);
+    BSET(LCD_PORT,  LCD_PIN_CLOCK);
     
     // Expose the next bit
     command = command << 1;
   }
 
   // Deslect chip  
-  BSET(LCD_PORT, PIN_CS);
+  BSET(LCD_PORT, LCD_PIN_CS);
     
 }
 
@@ -148,33 +149,33 @@ void WriteSpiData(byte data) {
   byte i;
   
   // Enable chip
-  BCLR(LCD_PORT, PIN_CLOCK);
-  BCLR(LCD_PORT, PIN_CS);
+  BCLR(LCD_PORT, LCD_PIN_CLOCK);
+  BCLR(LCD_PORT, LCD_PIN_CS);
   
   // CLock out the one for data
-  BSET(LCD_PORT, PIN_DATA);
-  BSET(LCD_PORT,  PIN_CLOCK);
+  BSET(LCD_PORT, LCD_PIN_DATA);
+  BSET(LCD_PORT,  LCD_PIN_CLOCK);
   
   // Clock out the 8 bits MSB first  
   for (i=0; i<8; i++) {
 
-    BCLR(LCD_PORT, PIN_CLOCK);
+    BCLR(LCD_PORT, LCD_PIN_CLOCK);
 
     // Set the data bit
     if (data & 0x80) {
-      BSET(LCD_PORT, PIN_DATA);
+      BSET(LCD_PORT, LCD_PIN_DATA);
     } else {
-      BCLR(LCD_PORT, PIN_DATA);
+      BCLR(LCD_PORT, LCD_PIN_DATA);
     }
     // Toggle the clock
-    BSET(LCD_PORT,  PIN_CLOCK);
+    BSET(LCD_PORT,  LCD_PIN_CLOCK);
     
     // Expose the next bit
     data = data << 1;
   }
 
   // Deslect chip  
-  BSET(LCD_PORT, PIN_CS);
+  BSET(LCD_PORT, LCD_PIN_CS);
   
 }
 
@@ -189,19 +190,21 @@ void WriteSpiData(byte data) {
 // Author: James P Lynch August 30, 2007
 // Modified by Skye Sweeney February 2011
 // *****************************************************************************
-void InitLcd(void) {
+void InitLcd(void)
+{
 
   // Set pin directions as outputs for SPI pins
-  LCD_DDR |= BIT(PIN_CS) | BIT(PIN_RESET) | BIT(PIN_DATA) | BIT(PIN_CLOCK);
+  LCD_DDR |= BIT(LCD_PIN_CS) | BIT(LCD_PIN_RESET) |
+             BIT(LCD_PIN_DATA) | BIT(LCD_PIN_CLOCK);
 
   // Start with PIN select HIGH  
-  BSET(LCD_PORT, PIN_CS);
-  BSET(LCD_PORT, PIN_CLOCK);
+  BSET(LCD_PORT, LCD_PIN_CS);
+  BSET(LCD_PORT, LCD_PIN_CLOCK);
   
   // Hardware reset
-  BCLR(LCD_PORT, PIN_RESET);
+  BCLR(LCD_PORT, LCD_PIN_RESET);
   delay_ms(20);
-  BSET(LCD_PORT, PIN_RESET);
+  BSET(LCD_PORT, LCD_PIN_RESET);
   delay_ms(20);
 
   // Display control
