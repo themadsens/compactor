@@ -66,7 +66,7 @@ inline int8_t trigint_sin8(trigint_angle_t angle)
  *
  * @note This is generally only needed for debugging purposes.
  */
-int trigint_sin8u_table_size();
+int trigint_sin8u_table_size(void);
 
 /**
  * Lookup a specific table entry for the given index.

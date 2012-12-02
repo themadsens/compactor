@@ -1,10 +1,9 @@
 /**
- * Declarations for serial stuff
+ * UART Handler
  */
 
-extern uint8_t suTick;
-extern uint8_t suMaskActive;
-extern uint8_t suState[3];
+extern MessageQueue SerialQ;
+ 
+void Task_Serial(void);
 
-extern uint8_t CurNmeaOut;
-extern uint8_t CurNmeaBit;
+// vim: set sw=3 ts=3 noet nu:

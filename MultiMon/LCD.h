@@ -2,11 +2,14 @@
  * @File LCD.h
  * Graphic primitives on top of driver routines
  */
+#ifndef _LCD_h__
+#define _LCD_h__
 
+#include "stdlib.h"
 #include "epson.h"
 
 // Normal string colors
-#define LCDPutStrM(S, X, Y) LCDPutStr((S), (X), (Y), FG, BG)
+#define LCDPutStrM(S, X, Y) LCDPutStr((S), (X), (Y), MEDIUM, FG, BG)
 // Calc "box" offsets
 #define LcdBoxIntX_M(o, L)  (112 - 10*(L) + o)
 #define LcdBoxIntY_M(o)     (3 + o)
@@ -17,8 +20,8 @@
 
 #define FG  WHITE
 #define BG  BLACK
-#define BG1 GRAY1
-#define FG1 GRAY12
+#define BG2 GRAY1
+#define FG2 GRAY12
 
 #if EPSON_EN_CIRCLE == 1
   void LCDSetCircle(byte x0, byte y0, int radius, int color);
@@ -30,10 +33,35 @@
 #endif
 
 #if EPSON_EN_TEXT == 1
-  void LCDPutStr(const char *pString, 
+void LCDPutStr2(const char *pString, 
+                const int inRam,
+               const byte x, 
+               const byte y, 
+               const int fontSize, 
+               const int fColor, 
+               const int bColor);
+
+inline void LCDPutStr(const char *pString, 
                  const byte x, 
                  const byte y, 
                  const int fontSize, 
                  const int fColor, 
-                 const int bColor);
+                 const int bColor) {
+    LCDPutStr2(pString, 1, x, y, fontSize, fColor, bColor);
+}
+inline void LCDPutStr_p(const char *pString, 
+                 const byte x, 
+                 const byte y, 
+                 const int fontSize, 
+                 const int fColor, 
+                 const int bColor) {
+    LCDPutStr2(pString, 0, x, y, fontSize, fColor, bColor);
+}
+#endif
+
+void LcdDrawGBox_P(uint8_t row, uint8_t nRow, const char *pStr);
+void RotInsertValue(uint16_t *arr, int val, uint8_t arrLen);
+void LcdDrawGraph(uint16_t *arr, uint8_t inverted, uint8_t x, uint8_t y, uint8_t h, uint8_t w);
+void LCDVoltBox(uint8_t x, uint8_t y, uint8_t val1to30);
+
 #endif

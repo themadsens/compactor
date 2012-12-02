@@ -7,7 +7,8 @@
 // **************************************
 // Include Files
 // **************************************
-#include "lcd.h"
+#include <string.h>
+#include "LCD.h"
 
 
 // *********************************************************************
@@ -201,7 +202,8 @@ void LCDSetCircle2C(byte x0, byte y0, int radius, int color1, int color2) {
 //
 // Author: James P Lynch August 30, 2007
 // ***************************************************************************
-void LCDPutStr(const char *pString, 
+void LCDPutStr2(const char *pString, 
+                const int inRam,
                const byte x, 
                const byte y, 
                const int fontSize, 
@@ -225,10 +227,13 @@ void LCDPutStr(const char *pString,
   yp = y;
   
   // Loop until null-terminator is seen
-  while (*pString != 0x00) {
+  int ch;
+  while ((ch = inRam ? *pString : pgm_read_byte(pString)) != 0x00) {
     
     // draw the character
-    LCDPutChar(*pString++, x, yp, fontSize, fColor, bColor);
+
+    LCDPutChar(ch, x, yp, fontSize, fColor, bColor);
+    pString++;
     
     // Advance the y position
     yp += nCols;
@@ -238,8 +243,73 @@ void LCDPutStr(const char *pString,
   }
 }
 
+static int LCDStrLen(const char *pString, const int inRam, const int fontSize)
+{
+   byte nCols;
+   unsigned char *pFont;
+	int ret = 0;
 
-LcdDrawGBox_P(1, 4, PSTR("WIND"));
+   pFont = (unsigned char *)FontTable[fontSize];
+   if (pFont == NULL) return 0;
+   nCols = pgm_read_byte(pFont + 0);
+   int ch;
+   while ((ch = inRam ? *pString : pgm_read_byte(pString)) != 0x00) {
+  	   ret += nCols;
+   }
+	return ret;
+}
 
-RotInsertValue(SpeedValues, Nav_STW);
-LcdDrawGraph(DepthValues, 0, LcdBoxIntX_M(2, 9), LcdBoxIntY_M(100), 18, 25);
+
+void LcdDrawGBox_P(uint8_t row, uint8_t nRow, const char *pStr)
+{
+   row--;
+	int strLen = LCDStrLen(pStr, 0, MEDIUM);
+   LCDSetLine(117-row*10, 2, 117-row*10, 126-strLen-2, BG);
+   LCDSetLine(117-row*10, 128, 117-row*10, 129, BG);
+	LCDPutStr_p(pStr, 112-row*10, 126-strLen, MEDIUM, FG, BG);
+   LCDSetLine(116-row*10, 1, 118-(row+nRow)*10, 1, FG);
+   LCDSetLine(116-row*10, 130, 118-(row+nRow)*10, 130, FG);
+}
+
+void RotInsertValue(uint16_t *arr, int val, uint8_t arrLen)
+{
+	memmove(arr+1, arr, (arrLen-1)*sizeof(int));
+	arr[arrLen-1] = val;
+}
+
+void LcdDrawGraph(uint16_t *arr, uint8_t inverted, uint8_t x, uint8_t y, uint8_t h, uint8_t w)
+{
+	int max = 0, min = 0x7fff, dif, i;
+
+	for (i = 0; i < w; i++) {
+		if (arr[i] < min)
+			min = arr[i];
+		if (arr[i] > max)
+			max = arr[i];
+	}
+   LCDSetLine(x, y, x, y+x+3, FG2);
+	h--;
+	x++;
+	dif = max - min;
+   LCDSetLine(x, y, x+dif*h/max, y, FG2);
+	y++;
+   LCDSetLine(x, y, x+h, y, FG);
+	for (i = 0; i < w; i++) {
+		y++;
+		LCDSetLine(x, y, x+(max-arr[i])*h/dif, y, FG2);
+	}
+	y++;
+   LCDSetLine(x, y, x+h, y, FG);
+} 
+
+void LCDVoltBox(uint8_t x, uint8_t y, uint8_t val1to30)
+{
+   LCDSetRect(x, y, x+8, y+32, 0, FG);
+   LCDSetRect(x+1, y+4, x+6, y+7, 1, RED);
+   LCDSetRect(x+7, y+4, x+6, y+10, 1, YELLOW);
+   LCDSetRect(x+11, y+4, x+6, y+20, 1, GREEN);
+   LCDSetRect(x+21, y+4, x+6, y+30, 1, ORANGE);
+   LCDSetRect(x+1, y+1, x+3, y+1+val1to30, 1, FG);
+}
+
+// vim: set sw=3 ts=3 noet:

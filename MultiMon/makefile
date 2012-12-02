@@ -1,4 +1,6 @@
-# Hey Emacs, this is a -*- makefile -*-
+# 
+# (C) Copyright 2012 flemming.madsen at madsensoft.dk.
+# Adapted for OBJDIR output etc
 #
 # WinAVR Sample makefile written by Eric B. Weddington, Jörg Wunsch, et al.
 # Released to the Public Domain
@@ -66,7 +68,7 @@ SRC=$(wildcard *.c)
 #ASRC = ../avrx/serialio.S
 ASRC=$(wildcard *.S)
 
-GCCLIB = ../avrx/avrx.a
+GCCLIB = ../../avrx/avrx/avrx.a
 
 # Optimization level, can be [0, 1, 2, 3, s].
 # 0 = turn off optimization. s = optimize for size.
@@ -81,7 +83,7 @@ DEBUG = dwarf-2
 
 # List any extra directories to look for include files here.
 #     Each directory must be seperated by a space.
-EXTRAINCDIRS =
+EXTRAINCDIRS = ../trigint
 
 
 # Compiler flag to set the C Standard level.
@@ -95,7 +97,7 @@ CSTANDARD = -std=gnu99
 CDEFS = -D$(PROJECT) -DF_CPU=$(CPUCLK) -DTICKRATE=$(TICKRATE) -DBAUDRATE=$(BAUDRATE)
 
 # Place -I options here
-CINCS = -I../avrx
+CINCS = -I../../avrx/avrx
 
 
 # Compiler flags.
@@ -270,19 +272,12 @@ GENDEPFLAGS = -Wp,-M,-MP,-MT,$@,-MF,$(@).dep
 # Combine all necessary flags and optional flags.
 # Add target processor to flags.
 ALL_CFLAGS = -mmcu=$(MCU) -I. $(CFLAGS) $(GENDEPFLAGS)
+CPP_CFLAGS = -mmcu=$(MCU) -I. $(CFLAGS)
 ALL_ASFLAGS = -mmcu=$(MCU) -I. -x assembler-with-cpp $(ASFLAGS)
 
 
-# Default target.
-Samples:
-	make all TARGET=Messages
-	make all TARGET=MessageTimers
-	make all TARGET=MessagesAndData
-	make all TARGET=MessageTimersAlt
-	make all TARGET=Timers
-
-#all: begin gccversion sizebefore build sizeafter finished end
-all: sizebefore build sizeafter
+all: begin gccversion sizebefore build sizeafter finished end
+#all: sizebefore build sizeafter
 
 build: $(OBJDIR) elf hex lss sym
 #build: coff hex lss sym
@@ -313,7 +308,7 @@ end:
 
 # Display size of file.
 HEXSIZE = $(SIZE) --target=$(FORMAT) $(TARGET).hex
-ELFSIZE = $(SIZE) -A $(TARGET).elf
+ELFSIZE = $(SIZE) -B $(TARGET).elf
 sizebefore:
 	@if [ -f $(TARGET).elf ]; then echo; echo $(MSG_SIZE_BEFORE); $(ELFSIZE); echo; fi
 
@@ -395,7 +390,9 @@ extcoff: $(TARGET).elf
 $(OBJDIR)/%.o : %.c
 	@echo
 	@echo $(MSG_COMPILING) $<
+	#@$(CC) -c $(CPP_CFLAGS) -E $< -o $(@:.o=.cpp)
 	$(CC) -c $(ALL_CFLAGS) $< -o $@
+	#@$(REMOVE) $(@:.o=.cpp)
 
 
 # Compile: create assembler files from C source files.
@@ -407,7 +404,9 @@ $(OBJDIR)/%.s : %.c
 $(OBJDIR)/%.o : %.S
 	@echo
 	@echo $(MSG_ASSEMBLING) $<
+	#@$(CC) -c $(CPP_CFLAGS) -E $< -o $(@:.o=.cpp)
 	$(CC) -c $(ALL_ASFLAGS) $< -o $@
+	#@$(REMOVE) $(@:.o=.cpp)
 
 
 
@@ -434,6 +433,7 @@ clean_list :
 	          $(OBJ:.o=.sym) \
 	          $(OBJ:.o=.cof) \
 	          $(OBJ:.o=.eep) \
+	          $(OBJ:.o=.cpp) \
 	          $(OBJ:.o=.o.dep)
 	#$(REMOVE) $(SRC:.c=.s)
 	#$(REMOVE) $(SRC:.c=.d)

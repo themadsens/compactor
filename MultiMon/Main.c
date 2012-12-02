@@ -1,6 +1,14 @@
-//*******************************************************
-//					Nokia Shield
-//*******************************************************
+/**
+ * (C) Copyright 2012 flemming.madsen at madsensoft.dk.
+ **                                          MarkDown
+ *
+ * MultiMon main
+ * =============
+ *
+ * * Initialize HW
+ * * Start tasks
+ * * Service most interrupts
+ */
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -8,8 +16,16 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
+#define AVRX_USER_PROCESS_DATA struct TimerControlBlock processDelay
+#include <avrx.h>
+
 #include "Screen.h"
 #include "Serial.h"
+#include "SoftUart.h"
+#include "WindOut.h"
+#include "BattStat.h"
+#include "util.h"
+#include "hardware.h"
 
 #define BAUD 38400
 #include <util/setbaud.h>
@@ -21,16 +37,16 @@
 #define TCNT2_TOP (F_CPU/8/6/SOFTBAUD)
 
 
-uint8_t msTick;
+uint16_t msTick;
 // Use Timer0 for the 1/1000s tick rate
 AVRX_SIGINT(TIMER0_COMP_vect)
 {
    IntProlog();                // Switch to kernel stack/context
    AvrXTimerHandler();         // Call Time queue manager
-   if (10 == ++msTick) {
-      msTick = 0;
+   if (0 == (++msTick)%10) {
       ScreenButtonTick();
    }
+	SBIT(LED_PORT, LED_DBG1) = msTick&1;
    Epilog();                   // Return to tasks
 }
 
@@ -41,56 +57,63 @@ AVRX_SIGINT(USARC_RXC_vect)
 	uint8_t ch = UDR;
 
 	// Already in critical section
-	UartFifo(9); // HiSpeed
-	UartFifo(ch);
+	SoftUartFifo(0xff); // HiSpeed
+	SoftUartFifo(ch);
 
-	Epilog()
+	Epilog();
 }
 
 // Hi speed timer for soft uart in & out at 4800 baud
 uint8_t suTick;
-uint8_t suMaskActive;
-uint8_t suState[3];
+extern uint8_t suEdgeTick[3];
 AVRX_SIGINT(TIMER2_COMP_vect)
 {
    IntProlog();                // Switch to kernel stack/context
    if (6 == ++suTick) {
       suTick = 0;
-		if (CurNmeaOut)
+		if (CurUartOut)
 			SoftUartOutKick();
 	}
-	if (suMaskActive)
-		SoftUartFifo(((PIND<<2)&0x30) | ((PIND<<4)&0x40) | (suTick&0x0f));
+	else if (CurUartOut && 3 == suTick)
+		SoftUartOutKick();
+	if (suEdgeTick[0] || suEdgeTick[1] || suEdgeTick[2])
+		SoftUartFifo((SBIT(SUART1_RXPORT, SUART1_RXPIN) << 4) |
+		             (SBIT(SUART2_RXPORT, SUART2_RXPIN) << 5) |
+		             (SBIT(SUART3_RXPORT, SUART3_RXPIN) << 6) |
+						 (suTick&0x0f));
    Epilog();                   // Return to tasks
 }
 // Use GCC register saving in these; Miniscule w. no kernel calls or stack use
 ISR(INT0_vect)
 {
-	suState[0] = suTick;
-	BSET(suMaskActive, 0);
+	suEdgeTick[0] = suTick + 1;
 	BCLR(GICR, INT0);
 }
 ISR(INT1_vect)
 {
-	suState[1] = suTick;
-	BSET(suMaskActive, 1);
+	suEdgeTick[1] = suTick + 1;
 	BCLR(GICR, INT1);
 }
 ISR(INT2_vect)
 {
-	suState[2] = suTick;
-	BSET(suMaskActive, 2);
+	suEdgeTick[2] = suTick + 1;
 	BCLR(GICR, INT2);
 }
 
 // Task declarations
-AVRX_GCC_TASK(Task_Screen, 20, 0);
-AVRX_GCC_TASK(Task_Uart, 20, 0);
-AVRX_GCC_TASK(Task_SoftUart, 20, 0);
+AVRX_GCC_TASK( Task_Screen,      50,  0);
+AVRX_GCC_TASK( Task_Serial,      30,  0);
+AVRX_GCC_TASK( Task_SoftUartIn,  20,  0);
+AVRX_GCC_TASK( Task_SoftUartOut, 20,  0);
+AVRX_GCC_TASK( Task_WindOut,     20,  0);
+AVRX_GCC_TASK( Task_BattStat,    20,  0);
+
+#define RUN(T) (memset(T##Stk, 0xAA, sizeof(T##Stk)), AvrXRunTask(TCB(T)))
 
 int main(void) 
 {
    BSET(MCUCR, SE);           // Sleep enable for idle'ing
+	BSET(ACSR, ACD);           // Save a little power
 
    // Timer0 heartbeat - CTC mode ensures equidistant ticks
    OCR0 = TCNT0_TOP;
@@ -103,7 +126,7 @@ int main(void)
    TCCR2 = BV(CS21)|BV(WGM21); // F_CPU/8 - CTC Mode
 
 	// Extern Ints 0,1,2
-	MCUCR |= BV(ISC11)|BV(ISC01)|
+	MCUCR |= BV(ISC11)|BV(ISC01);
 	//BCLR(MCUCSR, ISC2);
 	GICR |= BV(INT0)|BV(INT1)|BV(INT2);
 
@@ -116,12 +139,33 @@ int main(void)
    UCSRB = BV(RXEN)|BV(TXEN)|BV(RXCIE);	 //Enable Rx and Tx in UART + IEN
    UCSRC = BV(UCSZ0)|BV(UCSZ1)|BV(URSEL);  //8-Bit Characters
 
-	// Start tasks
-   AvrXRunTask(TCB(Task_Screen));
-   AvrXRunTask(TCB(Task_Uart));
-   AvrXRunTask(TCB(Task_SoftUart));
+	BSET(LED_DDR, LED_DBG1);
+	BSET(LED_DDR, LED_DBG2);
+	BSET(LED_PORT, LED_DBG1);
+	BSET(LED_PORT, LED_DBG2);
 
-   Epilog();                   // Fall back into kernel & start first task
+	// Start tasks
+#if 0
+   RUN(Task_Screen);
+   RUN(Task_Serial);
+   RUN(Task_SoftUartIn);
+   RUN(Task_SoftUartOut);
+   RUN(Task_WindOut);
+#endif
+   RUN(Task_BattStat);
+
+   Epilog();                   // Fall into kernel & start first task
 }
 
-// vim: set sw=3 ts=3 noet:
+
+void delay_ms(int x)
+{
+	AvrXDelay(&AvrXSelf()->processDelay, x);
+}
+
+TimerControlBlock *processTimer(void)
+{
+	return &AvrXSelf()->processDelay;
+}
+
+// vim: set sw=3 ts=3 noet nu:
