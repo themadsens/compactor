@@ -42,11 +42,12 @@ uint16_t msTick;
 AVRX_SIGINT(TIMER0_COMP_vect)
 {
    IntProlog();                // Switch to kernel stack/context
-   AvrXTimerHandler();         // Call Time queue manager
-   if (0 == (++msTick)%10) {
+	msTick++;
+	SBIT(LED_PORT, LED_DBG1) = msTick&1;
+   if (0 == msTick%10) {
       ScreenButtonTick();
    }
-	SBIT(LED_PORT, LED_DBG1) = msTick&1;
+   AvrXTimerHandler();         // Call Time queue manager
    Epilog();                   // Return to tasks
 }
 
@@ -118,7 +119,7 @@ int main(void)
    // Timer0 heartbeat - CTC mode ensures equidistant ticks
    OCR0 = TCNT0_TOP;
    BSET(TIMSK, OCIE0);
-   TCCR0 = BV(CS00)|BV(CS01)|BV(WGM01); // F_CPU/64 - CTC Mode
+   TCCR0 = BV(CS00)|BV(CS01)|BV(WGM00); // F_CPU/64 - CTC Mode
 
    // Timer2 4800 baud soft uart timer
    OCR2 = TCNT2_TOP;
