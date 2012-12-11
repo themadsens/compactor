@@ -11,18 +11,23 @@
 // Normal string colors
 #define LCDPutStrM(S, X, Y) LCDPutStr((S), (X), (Y), MEDIUM, FG, BG)
 // Calc "box" offsets
-#define LcdBoxIntX_M(o, L)  (112 - 10*(L) + o)
-#define LcdBoxIntY_M(o)     (3 + o)
+#define LcdBoxIntX_M(o, L)  (112 - 10*(L-1) - o)
+#define LcdBoxIntY_M(o)     (5 + o)
 // Clear box intenal area
-#define LcdClearGBoxInt_M(S, L) LCDSetRect(LcdBoxIntX_M(0, L + S + 1) + 1, 2, \
-														 LcdBoxIntX_M(0, L) - 1, 129, 1, BG)
+#define LcdClearGBoxInt_M(L, S) LCDSetRect(LcdBoxIntX_M(0, L + S), 4, \
+														 LcdBoxIntX_M(0, L), 128, 1, BG)
 
-
-#define FG  WHITE
-#define BG  BLACK
-#define BG2 GRAY1
-#define FG2 GRAY12
-
+#if 0
+#  define FG  WHITE
+#  define BG  BLACK
+#  define BG2 GRAY3
+#  define FG2 0X999
+#else
+#  define FG  BLACK
+#  define BG  WHITE
+#  define BG2 GRAY12
+#  define FG2 GRAY3
+#endif
 #if EPSON_EN_CIRCLE == 1
   void LCDSetCircle(byte x0, byte y0, int radius, int color);
   void LCDSetCircle2C(byte x0, byte y0, int radius, int color1, int color2);

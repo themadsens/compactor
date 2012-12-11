@@ -14,10 +14,13 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <avr/io.h>
+#include <avr/pgmspace.h>
 #include <avr/interrupt.h>
+#include <avr/sleep.h>
 
 #define AVRX_USER_PROCESS_DATA struct TimerControlBlock processDelay
 #include <avrx.h>
+#include <AvrXFifo.h>
 
 #include "Screen.h"
 #include "Serial.h"
@@ -34,102 +37,87 @@
 #define TCNT0_TOP (F_CPU/64/TICKRATE)
 
 #define SOFTBAUD 4800
-#define TCNT2_TOP (F_CPU/8/6/SOFTBAUD)
+#define TCNT2_TOP (F_CPU/8/3/SOFTBAUD)
 
+static int uart_putchar(char c, FILE *stream);
+static FILE mystdout = FDEV_SETUP_STREAM(uart_putchar, NULL, _FDEV_SETUP_WRITE);
 
-uint16_t msTick;
+inline void WindPulse(void)
+{
+    if (!windPulse || msTick - lastPulse < windPulse)
+        return;
+    SBIT(AWS_PORT, AWS_PIN) ^= 1;
+    lastPulse = msTick;
+}
+
+int16_t msTick;
 // Use Timer0 for the 1/1000s tick rate
 AVRX_SIGINT(TIMER0_COMP_vect)
 {
    IntProlog();                // Switch to kernel stack/context
+	BSET(LED_PORT, LED_DBG2);
 	msTick++;
-	SBIT(LED_PORT, LED_DBG1) = msTick&1;
-   if (0 == msTick%10) {
-      ScreenButtonTick();
-   }
+	WindPulse();                // Hook into wind square generation
    AvrXTimerHandler();         // Call Time queue manager
    Epilog();                   // Return to tasks
 }
 
-// Hispeed RX ready
-AVRX_SIGINT(USARC_RXC_vect)
-{
-	IntProlog();
-	uint8_t ch = UDR;
 
-	// Already in critical section
-	SoftUartFifo(0xff); // HiSpeed
-	SoftUartFifo(ch);
-
-	Epilog();
-}
-
-// Hi speed timer for soft uart in & out at 4800 baud
-uint8_t suTick;
-extern uint8_t suEdgeTick[3];
-AVRX_SIGINT(TIMER2_COMP_vect)
+#if 0
+AVRX_SIGINT(BADISR_vect)
 {
    IntProlog();                // Switch to kernel stack/context
-   if (6 == ++suTick) {
-      suTick = 0;
-		if (CurUartOut)
-			SoftUartOutKick();
-	}
-	else if (CurUartOut && 3 == suTick)
-		SoftUartOutKick();
-	if (suEdgeTick[0] || suEdgeTick[1] || suEdgeTick[2])
-		SoftUartFifo((SBIT(SUART1_RXPORT, SUART1_RXPIN) << 4) |
-		             (SBIT(SUART2_RXPORT, SUART2_RXPIN) << 5) |
-		             (SBIT(SUART3_RXPORT, SUART3_RXPIN) << 6) |
-						 (suTick&0x0f));
+	DEBUG("\n  -- BAD INT --\n");
    Epilog();                   // Return to tasks
 }
-// Use GCC register saving in these; Miniscule w. no kernel calls or stack use
-ISR(INT0_vect)
-{
-	suEdgeTick[0] = suTick + 1;
-	BCLR(GICR, INT0);
-}
-ISR(INT1_vect)
-{
-	suEdgeTick[1] = suTick + 1;
-	BCLR(GICR, INT1);
-}
-ISR(INT2_vect)
-{
-	suEdgeTick[2] = suTick + 1;
-	BCLR(GICR, INT2);
-}
+#endif
 
-// Task declarations
-AVRX_GCC_TASK( Task_Screen,      50,  0);
-AVRX_GCC_TASK( Task_Serial,      30,  0);
-AVRX_GCC_TASK( Task_SoftUartIn,  20,  0);
-AVRX_GCC_TASK( Task_SoftUartOut, 20,  0);
-AVRX_GCC_TASK( Task_WindOut,     20,  0);
-AVRX_GCC_TASK( Task_BattStat,    20,  0);
+// Debug out (stdout)
+uint8_t bufStdOut[200];
+pAvrXFifo pStdOut = (pAvrXFifo) bufStdOut;
 
-#define RUN(T) (memset(T##Stk, 0xAA, sizeof(T##Stk)), AvrXRunTask(TCB(T)))
+#if 0
+static void Task_Idle(void)
+{
+	for (;;) {
+      BCLR(LED_PORT, LED_DBG2);
+		sleep_mode();
+	}
+}
+AVRX_GCC_TASK( Task_Idle,        10,  9);
+#endif
+
+// Task declarations -- Falling priority order
+AVRX_GCC_TASK( Task_SoftUartOut,  50,  1);
+AVRX_GCC_TASK( Task_ScreenButton, 50,  2);
+AVRX_GCC_TASK( Task_Serial,      150,  4);
+AVRX_GCC_TASK( Task_WindOut,      50,  5);
+AVRX_GCC_TASK( Task_BattStat,     50,  5);
+AVRX_GCC_TASK( Task_Screen,      120,  6);
+
+#define RUN(T) (AvrXRunTask(TCB(T)))
 
 int main(void) 
 {
-   BSET(MCUCR, SE);           // Sleep enable for idle'ing
+ 	AvrXSetKernelStack(0);
+	pStdOut->size = (uint8_t) sizeof(bufStdOut) - sizeof(AvrXFifo) + 1;
+	AvrXFlushFifo(pStdOut);
+
+	set_sleep_mode(SLEEP_MODE_IDLE);
 	BSET(ACSR, ACD);           // Save a little power
 
    // Timer0 heartbeat - CTC mode ensures equidistant ticks
    OCR0 = TCNT0_TOP;
    BSET(TIMSK, OCIE0);
-   TCCR0 = BV(CS00)|BV(CS01)|BV(WGM00); // F_CPU/64 - CTC Mode
+   TCCR0 = BV(CS00)|BV(CS01)|BV(WGM01); // F_CPU/64 - CTC Mode
 
+#if 1
    // Timer2 4800 baud soft uart timer
    OCR2 = TCNT2_TOP;
    BSET(TIMSK, OCIE2);
    TCCR2 = BV(CS21)|BV(WGM21); // F_CPU/8 - CTC Mode
+#endif
 
-	// Extern Ints 0,1,2
-	MCUCR |= BV(ISC11)|BV(ISC01);
-	//BCLR(MCUCSR, ISC2);
-	GICR |= BV(INT0)|BV(INT1)|BV(INT2);
 
    // USART Baud rate etc
    UBRRH = UBRRH_VALUE;
@@ -139,23 +127,36 @@ int main(void)
 #endif
    UCSRB = BV(RXEN)|BV(TXEN)|BV(RXCIE);	 //Enable Rx and Tx in UART + IEN
    UCSRC = BV(UCSZ0)|BV(UCSZ1)|BV(URSEL);  //8-Bit Characters
+   stdout = &mystdout; //Required for printf init
 
-	BSET(LED_DDR, LED_DBG1);
-	BSET(LED_DDR, LED_DBG2);
 	BSET(LED_PORT, LED_DBG1);
 	BSET(LED_PORT, LED_DBG2);
+	BSET(LED_PORT, LED_DBG3);
+	BSET(LED_DDR, LED_DBG1);
+	BSET(LED_DDR, LED_DBG2);
+	BSET(LED_DDR, LED_DBG3);
 
+	// Initially free -- AvrX should do this !!
+	extern Mutex EEPromMutex;
+	AvrXSetSemaphore(&EEPromMutex);
+
+	msTick = 30000;
+
+	DEBUG("--> RUN");
 	// Start tasks
-#if 0
    RUN(Task_Screen);
-   RUN(Task_Serial);
-   RUN(Task_SoftUartIn);
-   RUN(Task_SoftUartOut);
-   RUN(Task_WindOut);
+   RUN(Task_ScreenButton);
+#if 0
+   RUN(Task_Idle);
 #endif
+   RUN(Task_Serial);
+   RUN(Task_SoftUartOut);
    RUN(Task_BattStat);
+   RUN(Task_WindOut);
 
    Epilog();                   // Fall into kernel & start first task
+
+	for (;;);
 }
 
 
@@ -167,6 +168,36 @@ void delay_ms(int x)
 TimerControlBlock *processTimer(void)
 {
 	return &AvrXSelf()->processDelay;
+}
+
+static int uart_putchar(char c, FILE *stream)
+{
+#if 1
+	if (c == '\n')
+		uart_putchar('\r', stream);
+
+	BeginCritical();
+	AvrXPutFifo(pStdOut, c);
+	EndCritical();
+	if (SBIT(UCSRA, UDRE)) {
+		UDR = AvrXPullFifo(pStdOut);
+		BSET(UCSRB, TXCIE);                     //Enable TX empty Intr.
+	}
+#endif
+	return 0;
+}
+// Hispeed RX ready
+AVRX_SIGINT(USART_TXC_vect)
+{
+	IntProlog();
+
+	int16_t ch = AvrXPullFifo(pStdOut);
+	if (FIFO_ERR != ch)
+		UDR = ch;
+	else
+		BCLR(UCSRB, TXCIE);                     //Enable TX empty Intr.
+
+	Epilog();
 }
 
 // vim: set sw=3 ts=3 noet nu:

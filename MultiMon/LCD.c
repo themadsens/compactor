@@ -253,7 +253,7 @@ static int LCDStrLen(const char *pString, const int inRam, const int fontSize)
    if (pFont == NULL) return 0;
    nCols = pgm_read_byte(pFont + 0);
    int ch;
-   while ((ch = inRam ? *pString : pgm_read_byte(pString)) != 0x00) {
+   while ((ch = (inRam ? *pString : pgm_read_byte(pString++))) != 0x00) {
   	   ret += nCols;
    }
 	return ret;
@@ -263,12 +263,17 @@ static int LCDStrLen(const char *pString, const int inRam, const int fontSize)
 void LcdDrawGBox_P(uint8_t row, uint8_t nRow, const char *pStr)
 {
    row--;
-	int strLen = LCDStrLen(pStr, 0, MEDIUM);
-   LCDSetLine(117-row*10, 2, 117-row*10, 126-strLen-2, BG);
-   LCDSetLine(117-row*10, 128, 117-row*10, 129, BG);
-	LCDPutStr_p(pStr, 112-row*10, 126-strLen, MEDIUM, FG, BG);
-   LCDSetLine(116-row*10, 1, 118-(row+nRow)*10, 1, FG);
-   LCDSetLine(116-row*10, 130, 118-(row+nRow)*10, 130, FG);
+	int strLen = LCDStrLen(pStr, 0, SMALL);
+	// Topline w. text
+   LCDSetLine(117-row*10, 4, 117-row*10, 126-strLen-4, FG2);
+	LCDPutStr_p(pStr, 112-row*10, 126-strLen, SMALL, FG2, BG);
+   LCDSetLine(117-row*10, 128, 117-row*10, 129, FG2);
+	// Left line
+   LCDSetLine(116-row*10, 3, 108-(row+nRow)*10, 3, FG2);
+	// Right line
+   LCDSetLine(116-row*10, 130, 108-(row+nRow)*10, 130, FG2);
+	// Bottom line
+   LCDSetLine(107-(row+nRow)*10, 4, 107-(row+nRow)*10, 129, FG2);
 }
 
 void RotInsertValue(uint16_t *arr, int val, uint8_t arrLen)
@@ -287,16 +292,19 @@ void LcdDrawGraph(uint16_t *arr, uint8_t inverted, uint8_t x, uint8_t y, uint8_t
 		if (arr[i] > max)
 			max = arr[i];
 	}
-   LCDSetLine(x, y, x, y+x+3, FG2);
+   LCDSetLine(x, y, x, y+w+4, FG2);
 	h--;
 	x++;
+	x++;
 	dif = max - min;
+   LCDSetLine(x, y, x+dif*h/max, y, FG2);
+	y++;
    LCDSetLine(x, y, x+dif*h/max, y, FG2);
 	y++;
    LCDSetLine(x, y, x+h, y, FG);
 	for (i = 0; i < w; i++) {
 		y++;
-		LCDSetLine(x, y, x+(max-arr[i])*h/dif, y, FG2);
+		LCDSetLine(x+1, y, x+(max-arr[i])*(h-1)/dif, y, FG2);
 	}
 	y++;
    LCDSetLine(x, y, x+h, y, FG);
@@ -304,12 +312,13 @@ void LcdDrawGraph(uint16_t *arr, uint8_t inverted, uint8_t x, uint8_t y, uint8_t
 
 void LCDVoltBox(uint8_t x, uint8_t y, uint8_t val1to30)
 {
-   LCDSetRect(x, y, x+8, y+32, 0, FG);
-   LCDSetRect(x+1, y+4, x+6, y+7, 1, RED);
-   LCDSetRect(x+7, y+4, x+6, y+10, 1, YELLOW);
-   LCDSetRect(x+11, y+4, x+6, y+20, 1, GREEN);
-   LCDSetRect(x+21, y+4, x+6, y+30, 1, ORANGE);
-   LCDSetRect(x+1, y+1, x+3, y+1+val1to30, 1, FG);
+   LCDSetRect(x, y   , x+7, y+32, 1, BG);
+   LCDSetRect(x, y   , x+7, y+32, 0, FG);
+   LCDSetRect(x+4, y+0 , x+6, y+7,  1, RED);
+   LCDSetRect(x+4, y+8 , x+6, y+10, 1, YELLOW);
+   LCDSetRect(x+4, y+11, x+6, y+20, 1, ORANGE);
+   LCDSetRect(x+4, y+21, x+6, y+30, 1, GREEN);
+   LCDSetRect(x+1, y+1,x+3, y+1+val1to30, 1, FG);
 }
 
 // vim: set sw=3 ts=3 noet:
