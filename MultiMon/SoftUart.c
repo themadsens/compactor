@@ -4,9 +4,12 @@
  *
  * Soft UART in & out
  * ==================
+ * Mostly int driven stuff.
+ * One task for pulling chars for the Out UART's
  */
 
 #include <avr/io.h>
+#include <stdio.h>
 #include <avrx.h>
 #include <AvrXFifo.h>
 #include "SoftUart.h"
@@ -18,183 +21,240 @@
 // IN
 //
 
-// 0,1: Queue next pointer. 2: Index. 2: Length
+static char WindBuf[50];
+static char DepthBuf[50];
+static char VdoBuf[40];
+static char RdrBuf[60];
+static char GpsBuf[99];
 
-uint8_t WindBuf[50];
-uint8_t GpsBuf[70];
-uint8_t MuxBuf[70];
-uint8_t DepthBuf[50];
-
-static void bufPut(uint8_t *s, uint8_t c)
+static void bufPut(char *s, uint8_t c)
 {
-	if (4 == s[3] && c != LF)
+	register struct NmeaBuf *b = (struct NmeaBuf *) s;
+	if (0 == b->ix && c != LF)
 		return;
-	if (5 == s[3] && c != '$')  {
-		s[3] = 4;
+	if (1 == b->ix && c != '$')  {
+		b->ix = 0;
+		return;
+	}
+	if (b->ix + b->off >= b->sz-1) {
+		b->ix = 0; //reset
 		return;
 	}
 
-	s[s[3]++] = c;
+	b->buf[b->off + b->ix++] = c;
 	if (CR == c) {
-		s[s[3]++] = 0;
-		s[3] = 4; // Length reset to 0
-		AvrXSendMessage(&SerialQ, (pMessageControlBlock) s);
+		b->buf[b->ix++] = 0;
+		b->off = b->ix;
+		b->ix = 0;
+		AvrXIntSendMessage(&SerialQ, (pMessageControlBlock) s);
 	}
 }
 
-char BitFifoBuf[sizeof(AvrXFifo) + 5];
-pAvrXFifo BitFifo = (pAvrXFifo) BitFifoBuf;
-void SoftUartFifo(uint8_t spec)
-{
-	AvrXPutFifo(BitFifo, spec);
-}
-
-struct SoftUartState 
+static struct SoftUartState 
 {
 	uint8_t state;
 	uint8_t ch;
-	uint8_t *buf;
+	char    *buf;
 } stIn[4];
-uint8_t suEdgeTick[3];
+static uint8_t suEdgeTick[4];
 
-void Task_SoftUartIn(void)
+static struct SoftUartState stOut[2];
+static Mutex suOut;
+
+static void SoftUartInInit(void)
 {
-	uint8_t i;
+	BSET(SUART1_RXPU, SUART1_RXPIN);
+	BSET(SUART2_RXPU, SUART2_RXPIN);
+	BSET(SUART3_RXPU, SUART3_RXPIN);
+	BSET(SUART4_RXPU, SUART4_RXPIN);
 
-	SBIT(SUART1_RXPU, SUART1_RXPIN);
-	SBIT(SUART2_RXPU, SUART2_RXPIN);
-	SBIT(SUART3_RXPU, SUART3_RXPIN);
-
-	WindBuf[2] = 1; WindBuf[3] = 4;
-	DepthBuf[2]= 2; DepthBuf[3]= 4;
-	MuxBuf[2]  = 3; MuxBuf[3]  = 4;
-	GpsBuf[2]  = 4; GpsBuf[3]  = 4;
+	WindBuf[2] = 1; WindBuf[3] = sizeof(WindBuf)  - sizeof(NmeaBuf);
+	DepthBuf[2]= 2; DepthBuf[3]= sizeof(DepthBuf) - sizeof(NmeaBuf);
+	VdoBuf[2]  = 3; VdoBuf[3]  = sizeof(VdoBuf)   - sizeof(NmeaBuf);
+	RdrBuf[2]  = 4; RdrBuf[3]  = sizeof(RdrBuf)   - sizeof(NmeaBuf);
+	GpsBuf[2]  = 5; GpsBuf[3]  = sizeof(GpsBuf)   - sizeof(NmeaBuf);
 	stIn[0].buf = WindBuf;
 	stIn[1].buf = DepthBuf;
-	stIn[2].buf = MuxBuf;
-	for (i = 0; i < 3; i++) 
-		stIn[i].state = 10;
+	stIn[2].buf = VdoBuf;
 
-	for (;;) {
-		uint8_t spec = AvrXWaitPullFifo(BitFifo);
+#if 1
+	// Extern Ints 0,1,2
+	MCUCR |= BV(ISC11)|BV(ISC01);
+	//BCLR(MCUCSR, ISC2);
+	GICR |= BV(INT0)|BV(INT1)|BV(INT2);
+#endif
+}
 
-		uint8_t i;
-		if (0xff == spec) {
-			bufPut(GpsBuf, AvrXPullFifo(BitFifo));
+// Hispeed RX ready
+AVRX_SIGINT(USART_RXC_vect)
+{
+	IntProlog();
+	BSET(LED_PORT, LED_DBG2);
+
+	uint8_t ch = UDR;
+	bufPut(GpsBuf, ch);
+	Epilog();
+}
+
+// Hi speed timer for soft uart in & out at 4800 baud
+uint8_t suTick;
+AVRX_SIGINT(TIMER2_COMP_vect)
+{
+   IntProlog();                // Switch to kernel stack/context
+	BSET(LED_PORT, LED_DBG2);
+
+	if (++suTick >= 3)
+		suTick = 0;
+	
+	register uint8_t pin;
+	register uint8_t i = suTick;
+	if (i < 2 && stOut[i].state) {
+		// Drive the output
+
+		stOut[i].state--;
+		switch (stOut[i].state) {
+		 case 9:
+			pin = 0;
+			break;
+
+		 default:
+			// LSB first
+			pin = (stOut[i].ch & BV(i-1)) >> (i-1);
+			break;
+
+		 case 0:
+			pin = 1;
+			AvrXIntSetSemaphore(&suOut);
+			break;
 		}
-		else {
-			uint8_t tck = spec & 0xf;
-			for (i = 0; i < 3; i++) {
-				if ((tck+3) % 6 == suEdgeTick[i] - 1) {
+		if (0 == i)
+			SBIT(SUART1_TXPORT, SUART1_TXPIN) = pin;
+		else
+			SBIT(SUART2_TXPORT, SUART2_TXPIN) = pin;
+	}
 
-					// The actual Soft UART
-					uint8_t pin = spec & (1<<(i+4));
-					switch (stIn[i].state--) {
-					 case 9:
-						if (pin == 0)     // start bit valid
-							break;
-						stIn[i].state = 0;
-						break;
+	// Drive the three soft uarts
+	for (i = 0; i < 4; i++) {
+		if (stIn[i].state && suTick == suEdgeTick[i]) {
 
-					 default:
-						// LSB first
-						stIn[i].ch = (stIn[i].ch >> 1) | (spec&(1<<i)) ? 0x80 : 0;
-						break;
+			// The actual Soft UART
+			switch (i) {
+			 default: // Avoid "uninitialized pin" warning
+			 case 0: pin = SBIT(SUART1_RXPORT, SUART1_RXPIN); break;
+			 case 1: pin = SBIT(SUART2_RXPORT, SUART2_RXPIN); break;
+			 case 2: pin = SBIT(SUART3_RXPORT, SUART3_RXPIN); break;
+			 case 3: pin = SBIT(SUART4_RXPORT, SUART4_RXPIN); break;
+			}
+			if (stIn[i].state == 99 && 0 == pin) { // SUART4 has no interrupt -> polled
+				stIn[3].state = 10;
+				suEdgeTick[3] = (suTick+1)%3;
+				continue;
+			}
+			stIn[i].state--;
+			switch (stIn[i].state) {
+			 case 9:
+				if (pin == 0)     // start bit valid
+					break;
+				stIn[i].state = 0;
+				break;
 
-					 case 0:
-						if (pin == 1) {   // stop bit valid
-							bufPut(stIn[i].buf, stIn[i].ch);
-						}
-					}
-					if (!stIn[i].state)
-					{
-						// Re-enable edge trigger INT
-						GICR |= BV(0==i ? INT0 : 1==i ? INT1 : INT2);
-						// Ready for next time
-						stIn[i].state = 10;
-						suEdgeTick[i] = 0;
-					}
+			 default:
+				// LSB first
+				stIn[i].ch = (stIn[i].ch >> 1) | (pin ? 0x80 : 0);
+				break;
+
+			 case 0:
+				if (pin == 1) {   // stop bit valid
+					bufPut(stIn[i].buf, stIn[i].ch);
 				}
+			}
+			if (0 == stIn[i].state) {
+				// Re-enable edge trigger INT
+				if (i == 3)
+					stIn[i].state = 99;
+				else
+					GICR |= BV(0==i ? INT0 : 1==i ? INT1 : INT2);
 			}
 		}
 	}
+   Epilog();                   // Return to tasks
+}
+
+AVRX_SIGINT(INT0_vect)
+{
+   IntProlog();                // Switch to kernel stack/context
+	BSET(LED_PORT, LED_DBG2);
+	suEdgeTick[0] = (suTick+1)%3;
+	stIn[0].state = 10;
+	BCLR(GICR, INT0);
+   Epilog();                   // Return to tasks
+}
+AVRX_SIGINT(INT1_vect)
+{
+   IntProlog();                // Switch to kernel stack/context
+	BSET(LED_PORT, LED_DBG2);
+	suEdgeTick[1] = (suTick+1)%3;
+	stIn[1].state = 10;
+	BCLR(GICR, INT1);
+   Epilog();                   // Return to tasks
+}
+AVRX_SIGINT(INT2_vect)
+{
+   IntProlog();                // Switch to kernel stack/context
+	BSET(LED_PORT, LED_DBG2);
+	suEdgeTick[2] = (suTick+1)%3;
+	stIn[2].state = 10;
+	BCLR(GICR, INT2);
+   Epilog();                   // Return to tasks
 }
 
 //
 // OUT
 //
-uint8_t NmeaFiOut[400];
-pAvrXFifo pNmeaFiOut = (pAvrXFifo) NmeaFiOut;
-uint8_t NmIIFiOut[56];
-pAvrXFifo pNmIIFiOut = (pAvrXFifo) NmIIFiOut;
-
-uint8_t CurUartOut;
-uint8_t RadioOn;
-
-Mutex suOut;
-void SoftUartOutKick(void )
-{
-	AvrXSetSemaphore(&suOut);
-}
+static char      NmeaFiOut[100];
+static pAvrXFifo pNmeaFiOut = (pAvrXFifo) NmeaFiOut;
+static char      NmIIFiOut[56];
+static pAvrXFifo pNmIIFiOut = (pAvrXFifo) NmIIFiOut;
 
 void NmeaPutFifo(uint8_t f, char *s)
 {
 	pAvrXFifo pf = 0==f ? pNmeaFiOut : pNmIIFiOut;
 
-	CurUartOut |= BV(f);
-	while (*s && *s != CR) 
+	//DEBUG
+	puts(s);
+
+	while (*s && *s != CR)  {
 		AvrXPutFifo(pf, *s++);
+	}
 	AvrXPutFifo(pf, CR);
 	AvrXPutFifo(pf, LF);
+	AvrXSetSemaphore(&suOut);
 }
 
-struct SoftUartState stOut[2];
 void Task_SoftUartOut(void)
 {
+   SoftUartInInit();
 
-	SBIT(SUART1_TXDDR, SUART1_TXPIN);
-	SBIT(SUART2_TXDDR, SUART2_TXPIN);
-	SBIT(SUART3_TXDDR, SUART3_TXPIN);
+	BSET(SUART1_TXDDR, SUART1_TXPIN);
+	BSET(SUART2_TXDDR, SUART2_TXPIN);
+
 	stOut[0].buf = NmeaFiOut;
-	stOut[1].buf = NmIIFiOut;
+	AvrXFlushFifo(pNmeaFiOut);
+	pNmeaFiOut->size = (uint8_t)sizeof(NmeaFiOut) - sizeof(AvrXFifo) + 1;
 
-	static uint8_t ix;
+	stOut[1].buf = NmIIFiOut;
+	AvrXFlushFifo(pNmIIFiOut);
+	pNmeaFiOut->size = (uint8_t)sizeof(NmIIFiOut) - sizeof(AvrXFifo) + 1;
+
+	register uint8_t i;
 	for (;;) {
 		AvrXWaitSemaphore(&suOut);
-		ix = ix+1 % 2;
-
-		if (0 == stOut[ix].state) {
-			if (FIFO_ERR != AvrXPeekFifo((pAvrXFifo) stOut[ix].buf)) {
-				stOut[ix].ch = AvrXPullFifo((pAvrXFifo) stOut[ix].buf);
-				stOut[ix].state = 10;
+		for (i = 0; i < 2; i++) {
+			if (0 == stOut[i].state && FIFO_ERR!= AvrXPeekFifo((pAvrXFifo) stOut[i].buf)) {
+				stOut[i].ch = AvrXPullFifo((pAvrXFifo) stOut[i].buf);
+				stOut[i].state = 10;
 			}
-			else
-				CurUartOut &= ~BV(ix);
 		}
-		switch (stOut[ix].state--) {
-		 case 9:
-			// Bit clr'd already
-			break;
-
-		 default:
-			// LSB first
-			SBIT(ix, 7) = stIn[ix].ch & 1;
-			stIn[ix].ch >>= 1;
-			break;
-
-		 case 0:
-			BSET(ix, 7);
-		}
-		if (ix) {
-			SBIT(SUART2_TXPORT, SUART1_TXPIN) = ix >> 7;
-			if (0 == SBIT(VHFSENSE_PORT, VHFSENSE_PIN))
-				SBIT(SUART3_TXPORT, SUART1_TXPIN) = ix >> 7;
-		}
-		else
-			SBIT(SUART1_TXPORT, SUART1_TXPIN) = ix >> 7;
-
-		BCLR(ix, 7);
 	}
 }
-
 // vim: set sw=3 ts=3 noet nu:

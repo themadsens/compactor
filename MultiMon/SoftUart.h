@@ -5,14 +5,17 @@
 #define CR 13
 #define LF 10
 
-extern uint8_t CurUartOut;
+typedef struct NmeaBuf {
+	pMutex  next;
+	uint8_t id;
+	uint8_t sz;
+	uint8_t ix;
+	uint8_t off;
+	char    buf[];
+} __attribute__((__packed__)) NmeaBuf;
 
-
-void SoftUartOutKick(void);
-void SoftUartFifo(uint8_t spec);
+// Uart Out
 void NmeaPutFifo(uint8_t f, char *s);
 
-void Task_SoftUartIn(void);
 void Task_SoftUartOut(void);
-
 // vim: set sw=3 ts=3 noet nu:

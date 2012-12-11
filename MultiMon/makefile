@@ -1,10 +1,10 @@
 # 
-# (C) Copyright 2012 flemming.madsen at madsensoft.dk.
-# Adapted for OBJDIR output etc
-#
-# WinAVR Sample makefile written by Eric B. Weddington, Jörg Wunsch, et al.
-# Released to the Public Domain
-# Please read the make user manual!
+# ( EEPROMC) Copyright 2012 flemming.madsen at madsensoft.dk.
+# A EEPROMdapted for OBJDIR output etc
+#   EEPROM
+# W EEPROMinAVR Sample makefile written by Eric B. Weddington, Jörg Wunsch, et al.
+# R EEPROMeleased to the Public Domain
+# P EEPROMlease read the make user manual!
 #
 # Additional material for this makefile was submitted by:
 #  Tim Henigan
@@ -180,26 +180,26 @@ LDFLAGS += $(PRINTF_LIB) $(SCANF_LIB) $(MATH_LIB)
 # Type: avrdude -c ?
 # to get a full listing.
 #
-AVRDUDE_PROGRAMMER = jtag1slow
+AVRDUDE_PROGRAMMER = dragon_jtag
 
 # com1 = serial port. Use lpt1 to connect to parallel port.
 #AVRDUDE_PORT = com4    # programmer connected to serial device
 #AVRDUDE_BAUD = 38400
-AVRDUDE_PORT = com7    # programmer connected to serial device
+AVRDUDE_PORT = usb     # programmer connected to serial device
 AVRDUDE_BAUD = 19200
 
 AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
-#AVRDUDE_WRITE_EEPROM = -U eeprom:w:$(TARGET).eep
+AVRDUDE_WRITE_EEPROM = -U eeprom:w:$(TARGET).eep
 
 
 # Uncomment the following if you want avrdude's erase cycle counter.
 # Note that this counter needs to be initialized first using -Yn,
 # see avrdude manual.
-#AVRDUDE_ERASE_COUNTER = -y
+AVRDUDE_ERASE_COUNTER = -y
 
 # Uncomment the following if you do /not/ wish a verification to be
 # performed after programming the device.
-#AVRDUDE_NO_VERIFY = -V
+AVRDUDE_NO_VERIFY = -V
 
 # Increase verbosity level.  Please use this when submitting bug
 # reports about avrdude. See <http://savannah.nongnu.org/projects/avrdude>
@@ -327,7 +327,12 @@ gccversion :
 program: $(TARGET).hex $(TARGET).eep
 	$(AVRDUDE) $(AVRDUDE_FLAGS) $(AVRDUDE_WRITE_FLASH) $(AVRDUDE_WRITE_EEPROM)
 
+reset:
+	avarice -g -R
 
+debug:
+	avarice -g -D -R :4242
+	avr-gdb $(TARGET).elf
 
 
 # Convert ELF to COFF for use in debugging / simulating in AVR Studio or VMLAB.
@@ -447,5 +452,6 @@ clean_list :
 # Listing of phony targets.
 .PHONY : all begin finish end sizebefore sizeafter gccversion \
 build elf hex eep lss sym coff extcoff \
-clean clean_list program
+clean clean_list program \
+debug reset
 

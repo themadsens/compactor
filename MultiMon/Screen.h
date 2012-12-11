@@ -6,7 +6,9 @@
 
 #include <avr/io.h>
 
-enum SCREEN {SCREEN_NAV = 0, SCREEN_BATT, SCREEN_CNFG , SCREEN_NUM};
+#define NO_VAL 0xffff
+
+enum SCREEN {SCREEN_NAV = 0, SCREEN_BATT, SCREEN_GPS, SCREEN_CNFG, SCREEN_NUM};
 extern uint8_t curScreen;
 
 #define CnvKt2Ms_I(N, D) ((N * 1852 / 3600) / D)
@@ -19,21 +21,24 @@ extern uint16_t  Nav_DBS;     // In 1/100ths m (cm up to 650m)
 extern int16_t   Nav_WTMP;    // In 1/10ths of a degree +-
 extern uint16_t  Nav_STW;     // In 1/100ths of a knot
 extern int16_t   Nav_AWA;     // In degrees 0..360
-extern int16_t   Nav_SUM;
+extern int16_t   Nav_HDG;     // In degrees 0..360
+extern uint16_t  Nav_SUM;
 
 #define NAV_WIND  0
 #define NAV_DEPTH 1
 #define NAV_HDG   2
+#define NAV_ATMP  3
 extern uint8_t   Nav_redraw;
 
-#define BATT_VHOUSE  0
-#define BATT_VENGINE 1
-#define BATT_VSOLAR  2
-#define BATT_IHOUSE  3
-#define BATT_ISOLAR  4
-#define BATT_HOUSEAH 5
-#define BATT_TEMP    6
 extern uint8_t  Batt_redraw;
+
+#define GPS_SAT 0
+#define GPS_POS 1
+extern uint8_t   Gps_redraw;
+extern uint8_t SatSNR[12];
+extern uint16_t SatHDOP;    // 5..30 or so
+extern uint8_t SatMODE;    // 1: No fix, 2: 2D fix, 3: 3D fix
+extern char *Gps_STR[];
 
 extern uint16_t  Batt_VHOUSE;     // In 1/100 Volt
 extern uint16_t  Batt_VENGINE;    // In 1/100 Volt
@@ -51,11 +56,7 @@ extern uint16_t Cnfg_DBSOFF EEPROM;    // in cm
 extern uint16_t Cnfg_AWAOFF EEPROM;    // in deg
 extern uint16_t Cnfg_HOUSEAH EEPROM;   // in AH
 extern uint16_t Cnfg_PEUKERT EEPROM;   // in 1/1000
-extern uint8_t SatSNR[12];
-extern uint8_t SatHDOP;    // 5..30 or so
-extern uint8_t SatMODE;    // 1: No fix, 2: 2D fix, 3: 3D fix
 
-void ScreenButtonTick(void);
 void ScreenUpdate(void);
 
 #endif

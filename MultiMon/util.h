@@ -7,6 +7,7 @@
 /************************************************************************/
 #ifndef _FMutil_h_
 #define _FMutil_h_
+#include <avrx.h> // sbi, cbi
 
 // 			Access bits like variables:
 
@@ -31,8 +32,8 @@ struct bits {
 #define SBIT_(port,pin) (((volatile struct bits*)&port)->b##pin)
 #define SBIT(port,pin) SBIT_(port,pin)
 
-#define BSET(port,pin) SBIT_(port,pin) = 1
-#define BCLR(port,pin) SBIT_(port,pin) = 0
+#define BSET(port,pin) sbi(port,pin)
+#define BCLR(port,pin) cbi(port,pin)
 
 #define BIT(b) (1 << (b))
 
@@ -40,6 +41,9 @@ inline i16 muldiv(i16 a, i16 b, i16 c) {
     return (i16) a * (i32) b / c;
 }
 
+#define DEBUG(fmt, ...) printf_P(PSTR(fmt "\n"), ##__VA_ARGS__)
+
+extern int16_t msTick;
 void delay_ms(int x);
 struct TimerControlBlock;
 struct TimerControlBlock *processTimer(void);

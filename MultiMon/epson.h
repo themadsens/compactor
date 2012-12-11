@@ -24,7 +24,7 @@ typedef unsigned char byte;
 #define EPSON_EN_CIRCLE      1
 #define EPSON_EN_RECTANGLE   1
 #define EPSON_EN_TEXT        1
-#undef  EPSON_EN_TEXT_SMALL
+#define EPSON_EN_TEXT_SMALL  1
 #define EPSON_EN_TEXT_MEDIUM 1
 #undef  EPSON_EN_TEXT_LARGE
 
