@@ -9,6 +9,7 @@
 #include <avrx.h>
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "hardware.h"
 #include "util.h"
@@ -67,8 +68,24 @@ static uint8_t NmeaParse_P(const char *spec, const char *str, uint16_t *res)
 			n++;
 			break;
 
+		 case 'f': // Fractional part in 1/10000'ths
+		 {
+			register uint16_t fac = 1000;
+			*res = 0;
+			for (; *str && isdigit(*str); str++) {
+				*res = (*str-'0') * fac;
+				fac/=10;
+			}
+			res++;
+			n++;
+			break;
+		 }
+
 		 case 'd': // Digit field
-			for (s = (char *) *res; *str && isdigit(*str); str++)
+			s = (char *) *res;
+			if ('-' == *str)
+				*s++ = *str;
+			for (; *str && isdigit(*str); str++)
 				*s++ = *str;
 			*s++ = 0;
 			res++;
@@ -98,6 +115,11 @@ static uint8_t NmeaParse_P(const char *spec, const char *str, uint16_t *res)
 		 case 'I': // Fixed point Integer 1/10'ths
 			*res = 0;
 			i = 0;
+			register int8_t sign = 1;
+			if ('-' == *str) {
+				sign = -1;
+				str++;
+			}
 			while (isdigit(*str) || ('I'==c && '.'==*str)) {
 				if ('.'==*str) {
 					if(i++ > 1) 
@@ -111,6 +133,7 @@ static uint8_t NmeaParse_P(const char *spec, const char *str, uint16_t *res)
 			}
 			if ('I'==c && i < 2)
 				*res = *res * 10;
+			*res *= sign;
 			n++;
 			res++;
 			break;
@@ -123,6 +146,72 @@ static uint8_t NmeaParse_P(const char *spec, const char *str, uint16_t *res)
 		}
 	}
 	return n;
+}
+
+static uint8_t bitLen;
+static void stuffBits(char *buf, int bits, long val)
+{
+	register uint8_t cur = 0;
+	while (bits > 0) {
+		register uint8_t rest = 6 - (bitLen%6);
+		if (rest >= bits) {
+			cur |= val>>(bits-rest);
+			val &= 0xffff >> (32-bits);
+			buf[bitLen/6] = cur + (cur > 32 ? 48 : 40);
+			cur = 0;
+			bitLen += rest;
+		}
+		else {
+			cur |= val << (rest-bits);
+			bitLen += bits;
+		}
+		bits -= rest;
+	}
+}
+
+static uint16_t num[7];
+static uint8_t n;
+
+static long oldLat;
+static long oldLon;
+static uint16_t oldPosSec;
+static inline void TllToVDM(char *buf)
+{
+	// $--TLL,xx,llll.lll,a,yyyyy.yyy,a,c--c,hhmmss.ss,a,a*hh<CR><LF>
+	register long sog = 0;
+	register long cog = 0;
+	register long lat;
+	register long lon;
+
+	if (NmeaParse_P(PSTR(",,Df,C,Df,C"), buf+5, num) != 6)
+		return;
+
+	lat = num[0]/100 * 600000L + num[0]%100 * 10000 + num[1] * ('S'==num[2] ? -1 : 1);
+	lon = num[3]/100 * 600000L + num[3]%100 * 10000 + num[4] * ('W'==num[5] ? -1 : 1);
+
+	// TODO Calc sog,cog from old*.
+	// See http://www.movable-type.co.uk/scripts/latlong.html
+
+	strcpy_P(buf, PSTR("$AIVDM,1,1,,A,")),
+	bitLen = 14*6;
+
+	stuffBits(buf,  6, 1);          // 0..5     Type 1
+	stuffBits(buf,  2, 0);          // 6..7     Repeat count
+	stuffBits(buf, 30, 1234567890); // 8..37    MMSI
+	stuffBits(buf,  4, 0);          // 38..41   Nav Status: Underway
+	stuffBits(buf,  8, 0);          // 42..49   ROT
+	stuffBits(buf, 10, sog);        // 50..59   SOG
+	stuffBits(buf, 28, lon);        // 61..88   Pos lon
+	stuffBits(buf, 27, lat);        // 89..115  Pos lat
+	stuffBits(buf, 12, cog);        // 116..127 COG
+	stuffBits(buf,  9, 0);          // 128..136 HDG
+	stuffBits(buf,  6, 62);         // 137..142 Time -> Dead reckoning
+	stuffBits(buf,  2, 0);          // 143..144 Maneuver N/A
+	stuffBits(buf, 23, 0);          // 145..167 Spares
+
+	oldLat = lat;
+	oldLon = lon;
+	oldPosSec = secTick;
 }
 
 #define DEF(a,b,c) ((a-1)<<14 | (b&0x7f)<<7 | (c&0x7f))
@@ -138,12 +227,16 @@ static int16_t stwTick;
 static int16_t sumTick;
 static int16_t hdgTick;
 static int16_t gsvTick;
+static inline void NmeaGsvFifo(uint8_t f, char *s)
+{
+	if (msTick - gsvTick > 300 || msTick - gsvTick < 0) 
+		NmeaPutFifo(f, s);
+}
+
 void Task_Serial(void)
 {
-	uint8_t bit = 0xff;
+	uint8_t bit;
 	for (;;) {
-		static uint16_t num[6];
-		static uint8_t n;
 		
 		AvrXStartTimerMessage(&tmb, 1000, &SerialQ);
 		msg = (NmeaBuf *) AvrXWaitMessage(&SerialQ);
@@ -152,6 +245,8 @@ void Task_Serial(void)
 
 		AvrXCancelTimerMessage(&tmb, &SerialQ);
 		LED_ActivityMask |= BV(msg->id - 1);
+
+		bit = 99;
 
 		if (msTick - windTick > 30000) {
 			Nav_AWA = Nav_AWS = NO_VAL;
@@ -193,14 +288,21 @@ void Task_Serial(void)
 
 			n = NmeaParse_P(PSTR(",I,C,I,C"), msg->buf, num);
 			if (4 == n && 'R' == num[1] && 'N' == num[3]) {
-				Nav_AWA = (num[0] + AvrXReadEEPromWord(&Cnfg_AWAOFF)) % 3600;
+				Nav_AWA = (num[0] + (AvrXReadEEPromWord(&Cnfg_AWAOFF)*10)) % 3600;
 				Nav_AWS = muldiv(num[2], AvrXReadEEPromWord(&Cnfg_AWSFAC), 1000);
-				windTick = msTick;
-				sprintf_P(msg->buf+4, PSTR("MWV,%d.%d,R,%d.%d,N,A"),
-							 Nav_AWA/10, Nav_AWA%10,
-							 Nav_AWS/10, Nav_AWS%10);
-				NmeaPutFifo(0, msg->buf+1);
-				bit = NAV_WIND;
+				if (abs(msTick - windTick) >= 250) {
+					sprintf_P(msg->buf+4, PSTR("MWV,%d.%d,R,%d.%d,N,A"),
+								 Nav_AWA/10, Nav_AWA%10,
+								 Nav_AWS/10, Nav_AWS%10);
+					NmeaGsvFifo(0, msg->buf+1);
+					windTick = msTick;
+					bit = NAV_WIND;
+				}
+
+				 if (Nav_AWS > maxWind[0])
+					maxWind[0] = Nav_AWS;
+				 if (Nav_AWS > maxWindCur)
+					maxWindCur = Nav_AWS;
 			}
 			break;
 
@@ -212,7 +314,7 @@ void Task_Serial(void)
 				atmpTick = msTick;
 				Nav_ATMP = num[0];
 				sprintf_P(msg->buf+4, PSTR("MDA,,,,,%d.%d,,,,,,,,,,,,,,,"), Nav_ATMP/10, Nav_ATMP%10);
-				NmeaPutFifo(0, msg->buf+1);
+				NmeaGsvFifo(0, msg->buf+1);
 				bit = NAV_ATMP;
 			}
 			break;
@@ -223,9 +325,9 @@ void Task_Serial(void)
 			n = NmeaParse_P(PSTR(",,,I,C"), msg->buf, num);
 			if (2 == n && 'M' == num[1]) {
 				dptTick = msTick;
-				Nav_DBS = num[0] + Cnfg_DBSOFF;
+				Nav_DBS = num[0] + (AvrXReadEEPromWord(&Cnfg_DBSOFF)+5)/10;
 				sprintf_P(msg->buf+4, PSTR("DBS,,,%d.%d,M,,"), Nav_DBS/10, Nav_DBS%10);
-				NmeaPutFifo(0, msg->buf);
+				NmeaGsvFifo(0, msg->buf);
 				// Depth-as-waypoint to VDO Compass
 				sprintf_P(msg->buf+4, PSTR("BOD,,,,,DPT:%d.%dm,"), Nav_DBS/10, Nav_DBS%10);
 				NmeaPutFifo(1, msg->buf+1);
@@ -236,11 +338,11 @@ void Task_Serial(void)
 		 case DEF(2, 'M', 'T'):
 		   // -- Triducer: Water temp
 		   // $YXMTW,18.5,C*1E
-			n = NmeaParse_P(PSTR(",,I,C"), msg->buf, num);
+			n = NmeaParse_P(PSTR(",I,C"), msg->buf, num);
 			if (2 == n && 'C' == num[1]) {
 				wtmpTick = msTick;
 				Nav_WTMP = num[0];
-				NmeaPutFifo(0, msg->buf+1);
+				NmeaGsvFifo(0, msg->buf+1);
 				bit = NAV_DEPTH;
 			}
 			break;
@@ -253,7 +355,7 @@ void Task_Serial(void)
 				stwTick = msTick;
 				Nav_STW = muldiv(num[0], Cnfg_STWFAC, 1000);
 				sprintf_P(msg->buf+4, PSTR("VHW,,,,,%d.%d,N,,"), Nav_STW/10, Nav_STW%10);
-				NmeaPutFifo(0, msg->buf+1);
+				NmeaGsvFifo(0, msg->buf+1);
 				bit = NAV_HDG;
 			}
 			break;
@@ -265,7 +367,7 @@ void Task_Serial(void)
 			if (1 == n && 'N' == num[1]) {
 				sumTick = msTick;
 				Nav_SUM = num[0];
-				NmeaPutFifo(0, msg->buf+1);
+				NmeaGsvFifo(0, msg->buf+1);
 			}
 			break;
 
@@ -276,13 +378,14 @@ void Task_Serial(void)
 			if (1 == n && 'M' == num[1]) {
 				hdgTick = msTick;
 				Nav_HDG = num[0];
-				NmeaPutFifo(0, msg->buf+1);
+				NmeaGsvFifo(0, msg->buf+1);
 			}
 			break;
 
 		 case DEF(4, 'T', 'L'):
 		   // -- Radar Target Lat Lon
 		   // $--TLL,xx,llll.lll,a,yyyyy.yyy,a,c--c,hhmmss.ss,a,a*hh<CR><LF>
+			TllToVDM(msg->buf);
 			NmeaPutFifo(0, msg->buf+1);
 			break;
 
@@ -309,9 +412,7 @@ void Task_Serial(void)
 			break;
 		 case DEF(5,'R','M'):
 		   // $GPRMC,152828.000,A,3646.8279,N,01432.7178,E,0.00,272.30,081212,,,A*68
-			if (msTick - gsvTick < 100) 
-			 break;
-			NmeaPutFifo(0, msg->buf+1);
+			NmeaGsvFifo(0, msg->buf+1);
 			if (curScreen == SCREEN_GPS) {
 				if (NmeaParse_P(PSTR(",d,,L,L,I,I"), msg->buf+4, (uint16_t *)Gps_STR) == 5) {
 					ScreenUpdate();

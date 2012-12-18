@@ -51,12 +51,33 @@ inline void WindPulse(void)
 }
 
 int16_t msTick;
+int16_t msAge;
+uint16_t secTick;
+uint16_t hdayTick;
 // Use Timer0 for the 1/1000s tick rate
 AVRX_SIGINT(TIMER0_COMP_vect)
 {
    IntProlog();                // Switch to kernel stack/context
-	BSET(LED_PORT, LED_DBG2);
+	BSET(LED_PORT, LED_DBG);
 	msTick++;
+	if (msTick - msAge >= 1000) {
+		msAge = msTick;
+		secTick++;
+		if (secTick >= (uint16_t)3600*12) {
+			secTick = 0;
+			hdayTick++;
+		}
+		if (0 == (secTick % 3600)) {
+			 memmove(maxWind+1, maxWind, sizeof(maxWind) - sizeof(uint16_t));
+			 maxWind[0] = Nav_AWS;
+			 maxWindCur = 0;
+			 for (register u8 i = 0; i < 24; i++) {
+				 if (maxWind[i] > maxWindCur) {
+					  maxWindCur = maxWind[i];
+				  }
+			  }
+		 }
+	}
 	WindPulse();                // Hook into wind square generation
    AvrXTimerHandler();         // Call Time queue manager
    Epilog();                   // Return to tasks
@@ -73,14 +94,14 @@ AVRX_SIGINT(BADISR_vect)
 #endif
 
 // Debug out (stdout)
-uint8_t bufStdOut[200];
+uint8_t bufStdOut[100];
 pAvrXFifo pStdOut = (pAvrXFifo) bufStdOut;
 
 #if 0
 static void Task_Idle(void)
 {
 	for (;;) {
-      BCLR(LED_PORT, LED_DBG2);
+      BCLR(LED_PORT, LED_DBG);
 		sleep_mode();
 	}
 }
@@ -88,12 +109,12 @@ AVRX_GCC_TASK( Task_Idle,        10,  9);
 #endif
 
 // Task declarations -- Falling priority order
-AVRX_GCC_TASK( Task_SoftUartOut,  50,  1);
-AVRX_GCC_TASK( Task_ScreenButton, 50,  2);
-AVRX_GCC_TASK( Task_Serial,      150,  4);
+AVRX_GCC_TASK( Task_SoftUartOut,  20,  1);
+AVRX_GCC_TASK( Task_ScreenButton, 20,  2);
+AVRX_GCC_TASK( Task_Serial,      100,  4);
 AVRX_GCC_TASK( Task_WindOut,      50,  5);
 AVRX_GCC_TASK( Task_BattStat,     50,  5);
-AVRX_GCC_TASK( Task_Screen,      120,  6);
+AVRX_GCC_TASK( Task_Screen,      100,  6);
 
 #define RUN(T) (AvrXRunTask(TCB(T)))
 
@@ -129,12 +150,8 @@ int main(void)
    UCSRC = BV(UCSZ0)|BV(UCSZ1)|BV(URSEL);  //8-Bit Characters
    stdout = &mystdout; //Required for printf init
 
-	BSET(LED_PORT, LED_DBG1);
-	BSET(LED_PORT, LED_DBG2);
-	BSET(LED_PORT, LED_DBG3);
-	BSET(LED_DDR, LED_DBG1);
-	BSET(LED_DDR, LED_DBG2);
-	BSET(LED_DDR, LED_DBG3);
+	BSET(LED_PORT, LED_DBG);
+	BSET(LED_DDR, LED_DBG);
 
 	// Initially free -- AvrX should do this !!
 	extern Mutex EEPromMutex;
