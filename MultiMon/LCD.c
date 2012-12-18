@@ -314,10 +314,10 @@ void LCDVoltBox(uint8_t x, uint8_t y, uint8_t val1to30)
 {
    LCDSetRect(x, y   , x+7, y+32, 1, BG);
    LCDSetRect(x, y   , x+7, y+32, 0, FG);
-   LCDSetRect(x+4, y+0 , x+6, y+7,  1, RED);
+   LCDSetRect(x+4, y+1 , x+6, y+7,  1, RED);
    LCDSetRect(x+4, y+8 , x+6, y+10, 1, YELLOW);
    LCDSetRect(x+4, y+11, x+6, y+20, 1, ORANGE);
-   LCDSetRect(x+4, y+21, x+6, y+30, 1, GREEN);
+   LCDSetRect(x+4, y+21, x+6, y+31, 1, GREEN);
    LCDSetRect(x+1, y+1,x+3, y+1+val1to30, 1, FG);
 }
 

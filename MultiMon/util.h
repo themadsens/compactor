@@ -43,7 +43,12 @@ inline i16 muldiv(i16 a, i16 b, i16 c) {
 
 #define DEBUG(fmt, ...) printf_P(PSTR(fmt "\n"), ##__VA_ARGS__)
 
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#define MAX(a,b) ((a) > (b) ? (a) : (b))
+
 extern int16_t msTick;
+extern uint16_t secTick;
+extern uint16_t hdayTick;
 void delay_ms(int x);
 struct TimerControlBlock;
 struct TimerControlBlock *processTimer(void);

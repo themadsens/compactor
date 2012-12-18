@@ -11,8 +11,8 @@
 enum SCREEN {SCREEN_NAV = 0, SCREEN_BATT, SCREEN_GPS, SCREEN_CNFG, SCREEN_NUM};
 extern uint8_t curScreen;
 
-#define CnvKt2Ms_I(N, D) ((N * 1852 / 3600) / D)
-#define CnvKt2Ms_F(N, D) ((N * 1852 / 3600) % D)
+#define CnvKt2Ms_I(N, D) (muldiv(N, 1852, 3600) / D)
+#define CnvKt2Ms_F(N, D) (muldiv(N, 1852, 3600) % D)
 
 extern int16_t   Nav_AWA;     // In degrees bows clockwise +-180
 extern uint16_t  Nav_AWS;     // In 1/10ths of a knot
@@ -23,6 +23,9 @@ extern uint16_t  Nav_STW;     // In 1/100ths of a knot
 extern int16_t   Nav_AWA;     // In degrees 0..360
 extern int16_t   Nav_HDG;     // In degrees 0..360
 extern uint16_t  Nav_SUM;
+
+extern uint16_t maxWind[24];
+extern uint16_t maxWindCur;
 
 #define NAV_WIND  0
 #define NAV_DEPTH 1
@@ -47,6 +50,12 @@ extern uint16_t  Batt_IHOUSE;     // In 1/10 Amps
 extern uint16_t  Batt_ISOLAR;     // In 1/10 Amps
 extern uint16_t  Batt_HOUSEAH;    // In 1/10 AmpHours
 extern uint16_t  Batt_TEMP;       // In 1/10 C
+#define BATT_VHOUSE  0
+#define BATT_VENGINE 1
+#define BATT_IHOUSE  2
+#define BATT_ISOLAR  3
+#define BATT_TEMP    4
+#define BATT_HOUSEAH 5
 
 extern uint8_t LED_ActivityMask; // Set bits in this for the UI
 
@@ -58,5 +67,6 @@ extern uint16_t Cnfg_HOUSEAH EEPROM;   // in AH
 extern uint16_t Cnfg_PEUKERT EEPROM;   // in 1/1000
 
 void ScreenUpdate(void);
+void ScreenUpdateInt(void);
 
 #endif

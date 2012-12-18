@@ -10,6 +10,7 @@
 
 #include <avr/io.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <avrx.h>
 #include <AvrXFifo.h>
 #include "SoftUart.h"
@@ -89,22 +90,28 @@ static void SoftUartInInit(void)
 AVRX_SIGINT(USART_RXC_vect)
 {
 	IntProlog();
-	BSET(LED_PORT, LED_DBG2);
+	BSET(LED_PORT, LED_DBG);
 
 	uint8_t ch = UDR;
 	bufPut(GpsBuf, ch);
 	Epilog();
 }
 
+static int16_t vhfOnTime;
+
 // Hi speed timer for soft uart in & out at 4800 baud
 uint8_t suTick;
 AVRX_SIGINT(TIMER2_COMP_vect)
 {
    IntProlog();                // Switch to kernel stack/context
-	BSET(LED_PORT, LED_DBG2);
+	BSET(LED_PORT, LED_DBG);
 
-	if (++suTick >= 3)
+	if (++suTick >= 3) {
 		suTick = 0;
+
+		if (SBIT(VHF_ON_RXPORT, VHF_ON_RXPIN))
+			vhfOnTime = secTick;
+	}
 	
 	register uint8_t pin;
 	register uint8_t i = suTick;
@@ -119,7 +126,7 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 
 		 default:
 			// LSB first
-			pin = (stOut[i].ch & BV(i-1)) >> (i-1);
+			pin = (stOut[i].ch & BV(8-stOut[i].state)) ? 1 : 0;
 			break;
 
 		 case 0:
@@ -127,8 +134,11 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 			AvrXIntSetSemaphore(&suOut);
 			break;
 		}
-		if (0 == i)
+		if (0 == i) {
 			SBIT(SUART1_TXPORT, SUART1_TXPIN) = pin;
+			if (abs(secTick - vhfOnTime) > 5)
+				SBIT(VHF_PORT, VHF_UART) = pin;
+		}
 		else
 			SBIT(SUART2_TXPORT, SUART2_TXPIN) = pin;
 	}
@@ -183,7 +193,7 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 AVRX_SIGINT(INT0_vect)
 {
    IntProlog();                // Switch to kernel stack/context
-	BSET(LED_PORT, LED_DBG2);
+	BSET(LED_PORT, LED_DBG);
 	suEdgeTick[0] = (suTick+1)%3;
 	stIn[0].state = 10;
 	BCLR(GICR, INT0);
@@ -192,7 +202,7 @@ AVRX_SIGINT(INT0_vect)
 AVRX_SIGINT(INT1_vect)
 {
    IntProlog();                // Switch to kernel stack/context
-	BSET(LED_PORT, LED_DBG2);
+	BSET(LED_PORT, LED_DBG);
 	suEdgeTick[1] = (suTick+1)%3;
 	stIn[1].state = 10;
 	BCLR(GICR, INT1);
@@ -201,7 +211,7 @@ AVRX_SIGINT(INT1_vect)
 AVRX_SIGINT(INT2_vect)
 {
    IntProlog();                // Switch to kernel stack/context
-	BSET(LED_PORT, LED_DBG2);
+	BSET(LED_PORT, LED_DBG);
 	suEdgeTick[2] = (suTick+1)%3;
 	stIn[2].state = 10;
 	BCLR(GICR, INT2);
@@ -211,21 +221,22 @@ AVRX_SIGINT(INT2_vect)
 //
 // OUT
 //
-static char      NmeaFiOut[100];
+static char      NmeaFiOut[260];
 static pAvrXFifo pNmeaFiOut = (pAvrXFifo) NmeaFiOut;
-static char      NmIIFiOut[56];
+static char      NmIIFiOut[70];
 static pAvrXFifo pNmIIFiOut = (pAvrXFifo) NmIIFiOut;
 
 void NmeaPutFifo(uint8_t f, char *s)
 {
-	pAvrXFifo pf = 0==f ? pNmeaFiOut : pNmIIFiOut;
-
-	//DEBUG
-	puts(s);
+	register pAvrXFifo pf = 0==f ? pNmeaFiOut : pNmIIFiOut;
+	register uint8_t err = 0;
 
 	while (*s && *s != CR)  {
-		AvrXPutFifo(pf, *s++);
+		if (FIFO_ERR == AvrXPutFifo(pf, *s++))
+			err = 1;
 	}
+	if (err)
+		puts("FIFO_ERR");
 	AvrXPutFifo(pf, CR);
 	AvrXPutFifo(pf, LF);
 	AvrXSetSemaphore(&suOut);
@@ -237,14 +248,16 @@ void Task_SoftUartOut(void)
 
 	BSET(SUART1_TXDDR, SUART1_TXPIN);
 	BSET(SUART2_TXDDR, SUART2_TXPIN);
+	BSET(VHF_ON_RXPU, VHF_ON_RXPIN);
+	BSET(VHF_DDR, VHF_UART);
 
 	stOut[0].buf = NmeaFiOut;
 	AvrXFlushFifo(pNmeaFiOut);
-	pNmeaFiOut->size = (uint8_t)sizeof(NmeaFiOut) - sizeof(AvrXFifo) + 1;
+	pNmeaFiOut->size = (uint8_t)(sizeof(NmeaFiOut) - sizeof(AvrXFifo) + 1);
 
 	stOut[1].buf = NmIIFiOut;
 	AvrXFlushFifo(pNmIIFiOut);
-	pNmeaFiOut->size = (uint8_t)sizeof(NmIIFiOut) - sizeof(AvrXFifo) + 1;
+	pNmIIFiOut->size = (uint8_t)sizeof(NmIIFiOut) - sizeof(AvrXFifo) + 1;
 
 	register uint8_t i;
 	for (;;) {
