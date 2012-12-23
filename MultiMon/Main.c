@@ -94,7 +94,7 @@ AVRX_SIGINT(BADISR_vect)
 #endif
 
 // Debug out (stdout)
-uint8_t bufStdOut[100];
+uint8_t bufStdOut[90];
 pAvrXFifo pStdOut = (pAvrXFifo) bufStdOut;
 
 #if 0
@@ -146,7 +146,7 @@ int main(void)
 #if USE2X
    UCSRA |= BV(U2X);			    //Might double the UART Speed
 #endif
-   UCSRB = BV(RXEN)|BV(TXEN)|BV(RXCIE);	 //Enable Rx and Tx in UART + IEN
+   UCSRB = BV(RXEN)|BV(RXCIE);	 //Enable Rx in UART + IEN
    UCSRC = BV(UCSZ0)|BV(UCSZ1)|BV(URSEL);  //8-Bit Characters
    stdout = &mystdout; //Required for printf init
 
@@ -197,6 +197,7 @@ static int uart_putchar(char c, FILE *stream)
 	AvrXPutFifo(pStdOut, c);
 	EndCritical();
 	if (SBIT(UCSRA, UDRE)) {
+		BSET(UCSRB, TXEN);                      //Hand over pin to Uart
 		UDR = AvrXPullFifo(pStdOut);
 		BSET(UCSRB, TXCIE);                     //Enable TX empty Intr.
 	}
@@ -209,12 +210,19 @@ AVRX_SIGINT(USART_TXC_vect)
 	IntProlog();
 
 	int16_t ch = AvrXPullFifo(pStdOut);
-	if (FIFO_ERR != ch)
-		UDR = ch;
+	if (FIFO_ERR == ch) {
+		BCLR(UCSRB, TXCIE);
+		BCLR(UCSRB, TXEN); //Hand over to GPIO (Debug LED) until next tx
+	}
 	else
-		BCLR(UCSRB, TXCIE);                     //Enable TX empty Intr.
+		UDR = ch;
 
 	Epilog();
+}
+
+long CalcBrgRng(long lat, long lon)
+{
+	return 1;
 }
 
 // vim: set sw=3 ts=3 noet nu:

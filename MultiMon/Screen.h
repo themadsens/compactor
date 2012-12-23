@@ -66,6 +66,7 @@ extern uint16_t Cnfg_AWAOFF EEPROM;    // in deg
 extern uint16_t Cnfg_HOUSEAH EEPROM;   // in AH
 extern uint16_t Cnfg_PEUKERT EEPROM;   // in 1/1000
 
+void DoBuzzer(void);
 void ScreenUpdate(void);
 void ScreenUpdateInt(void);
 

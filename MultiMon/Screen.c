@@ -36,8 +36,12 @@
 #include "util.h"
 #include "trigint_sin8.h"
 
-#define LCD_ON() (BCLR(LCDPOWER_PORT, LCDPOWER_PIN), delay_ms(50), InitLcd()) 
-#define LCD_OFF() BSET(LCDPOWER_PORT, LCDPOWER_PIN)
+#define LCD_ON() (BSET(LCDPOWER_PORT, LCDPOWER_PIN), delay_ms(50), InitLcd()) 
+#define LCD_OFF() BCLR(LCDPOWER_PORT, LCDPOWER_PIN)
+
+
+
+static void showAlarm(const char *s, int sound);
 
 // --- GLOBALS
 int16_t   Nav_AWA;     // In degrees bows clockwise +-180
@@ -639,6 +643,20 @@ static inline i8 ScreenButtonDo(void)
 	}
 
 	return 0;
+}
+
+static void showAlarm(const char *s, int sound)
+{
+	if (bs.powerOff) {
+		LCD_ON();
+		bs.powerOff = 0;
+	}
+
+	//LCDSetRect();
+}
+
+void DoBuzzer(void)
+{
 }
 
 static const char S1[] PROGMEM = "NAV";
