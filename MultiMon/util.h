@@ -46,6 +46,8 @@ inline i16 muldiv(i16 a, i16 b, i16 c) {
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 
+long CalcBrgRng(long lat, long lon);
+
 extern int16_t msTick;
 extern uint16_t secTick;
 extern uint16_t hdayTick;

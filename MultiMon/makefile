@@ -180,12 +180,13 @@ LDFLAGS += $(PRINTF_LIB) $(SCANF_LIB) $(MATH_LIB)
 # Type: avrdude -c ?
 # to get a full listing.
 #
-AVRDUDE_PROGRAMMER = dragon_jtag
+#AVRDUDE_PROGRAMMER = dragon_jtag
+AVRDUDE_PROGRAMMER = jtag1
 
 # com1 = serial port. Use lpt1 to connect to parallel port.
-#AVRDUDE_PORT = com4    # programmer connected to serial device
+AVRDUDE_PORT = com19    # programmer connected to serial device
 #AVRDUDE_BAUD = 38400
-AVRDUDE_PORT = usb     # programmer connected to serial device
+#AVRDUDE_PORT = usb     # programmer connected to serial device
 AVRDUDE_BAUD = 19200
 
 AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex

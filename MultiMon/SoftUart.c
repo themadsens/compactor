@@ -106,6 +106,8 @@ AVRX_SIGINT(TIMER2_COMP_vect)
    IntProlog();                // Switch to kernel stack/context
 	BSET(LED_PORT, LED_DBG);
 
+	DoBuzzer();
+
 	if (++suTick >= 3) {
 		suTick = 0;
 
