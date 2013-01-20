@@ -180,14 +180,14 @@ LDFLAGS += $(PRINTF_LIB) $(SCANF_LIB) $(MATH_LIB)
 # Type: avrdude -c ?
 # to get a full listing.
 #
-#AVRDUDE_PROGRAMMER = dragon_jtag
-AVRDUDE_PROGRAMMER = jtag1
+AVRDUDE_PROGRAMMER = dragon_jtag
+#AVRDUDE_PROGRAMMER = jtag1
 
 # com1 = serial port. Use lpt1 to connect to parallel port.
-AVRDUDE_PORT = com19    # programmer connected to serial device
+#AVRDUDE_PORT = com19    # programmer connected to serial device
 #AVRDUDE_BAUD = 38400
-#AVRDUDE_PORT = usb     # programmer connected to serial device
-AVRDUDE_BAUD = 19200
+AVRDUDE_PORT = usb     # programmer connected to serial device
+#AVRDUDE_BAUD = -b 19200
 
 AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
 AVRDUDE_WRITE_EEPROM = -U eeprom:w:$(TARGET).eep
@@ -207,7 +207,7 @@ AVRDUDE_NO_VERIFY = -V
 # to submit bug reports.
 #AVRDUDE_VERBOSE = -v -v
 
-AVRDUDE_FLAGS = -p $(MCU) -P $(AVRDUDE_PORT) -c $(AVRDUDE_PROGRAMMER) -b $(AVRDUDE_BAUD)
+AVRDUDE_FLAGS = -p $(MCU) -P $(AVRDUDE_PORT) -c $(AVRDUDE_PROGRAMMER) $(AVRDUDE_BAUD)
 AVRDUDE_FLAGS += $(AVRDUDE_NO_VERIFY)
 AVRDUDE_FLAGS += $(AVRDUDE_VERBOSE)
 AVRDUDE_FLAGS += $(AVRDUDE_ERASE_COUNTER)

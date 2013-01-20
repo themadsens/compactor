@@ -49,13 +49,15 @@ void Task_BattStat(void)
 			break;
 		 case 5:
 			// Every 0.9 sec -> 3600 / 0.9 = 4000
-			Batt_AH_micro10 += pow(Batt_IHOUSE * 2.5, Cnfg_PEUKERT / 1000.0);
+#if 0
+			Batt_AH_micro10 += round(pow(Batt_IHOUSE / 10.0, Cnfg_PEUKERT) * 25);
 			if (Batt_AH_micro10 > 10000) {
 				Batt_HOUSEAH += Batt_AH_micro10 / 10000;
 				Batt_AH_micro10 = Batt_AH_micro10 % 10000;
 				Batt_redraw |= BV(BATT_HOUSEAH);
 				ScreenUpdate();
 			}
+#endif
 			break;
 		}
 
@@ -84,10 +86,9 @@ AVRX_SIGINT(ADC_vect)
 		Batt_TEMP = 583 - muldiv(ADCH, 185, 400/4);
 		break;
 	}
-	Batt_redraw |= BV(state);
+	Batt_redraw |= BV(state/2);
 	ScreenUpdateInt();
 
-	
    Epilog();                   // Return to tasks
 }
 // vim: set sw=3 ts=3 noet nu:

@@ -22,6 +22,7 @@
 #include <avrx.h>
 #include <AvrXFifo.h>
 
+#include "trigint_sin8.h"
 #include "Screen.h"
 #include "Serial.h"
 #include "SoftUart.h"
@@ -35,9 +36,6 @@
 
 #define TICKRATE 1000       // AvrX timer queue 1ms resolution
 #define TCNT0_TOP (F_CPU/64/TICKRATE)
-
-#define SOFTBAUD 4800
-#define TCNT2_TOP (F_CPU/8/3/SOFTBAUD)
 
 static int uart_putchar(char c, FILE *stream);
 static FILE mystdout = FDEV_SETUP_STREAM(uart_putchar, NULL, _FDEV_SETUP_WRITE);
@@ -112,8 +110,8 @@ AVRX_GCC_TASK( Task_Idle,        10,  9);
 AVRX_GCC_TASK( Task_SoftUartOut,  20,  1);
 AVRX_GCC_TASK( Task_ScreenButton, 20,  2);
 AVRX_GCC_TASK( Task_Serial,      100,  4);
-AVRX_GCC_TASK( Task_WindOut,      50,  5);
-AVRX_GCC_TASK( Task_BattStat,     50,  5);
+AVRX_GCC_TASK( Task_WindOut,      20,  5);
+AVRX_GCC_TASK( Task_BattStat,     20,  5);
 AVRX_GCC_TASK( Task_Screen,      100,  6);
 
 #define RUN(T) (AvrXRunTask(TCB(T)))
@@ -131,14 +129,6 @@ int main(void)
    OCR0 = TCNT0_TOP;
    BSET(TIMSK, OCIE0);
    TCCR0 = BV(CS00)|BV(CS01)|BV(WGM01); // F_CPU/64 - CTC Mode
-
-#if 1
-   // Timer2 4800 baud soft uart timer
-   OCR2 = TCNT2_TOP;
-   BSET(TIMSK, OCIE2);
-   TCCR2 = BV(CS21)|BV(WGM21); // F_CPU/8 - CTC Mode
-#endif
-
 
    // USART Baud rate etc
    UBRRH = UBRRH_VALUE;
@@ -220,9 +210,36 @@ AVRX_SIGINT(USART_TXC_vect)
 	Epilog();
 }
 
-long CalcBrgRng(long lat, long lon)
+#define TRIGINT_PI2 0x4000
+
+long CalcRngBrg(long lat1, long lat2, long lon1, long lon2, uint16_t *Brg)
 {
-	return 1;
+	register int16_t x;
+	register uint16_t lonDist, latDist;
+	
+	// TRIGINT_PI2 / 360 ~= 45.51 -- Keep it in 16bit!
+
+	latDist = abs(lat2 - lat1);
+	x = trigint_sin8(TRIGINT_PI2/4 - muldiv(abs((lat2+lat1)/2), 4551, 100));
+	lonDist = muldiv(abs(lon2 - lon1), abs(x), 128);
+
+	if (Brg) {
+		if (latDist > lonDist)
+			x = muldiv(lonDist, 100, latDist);
+		else
+			x = muldiv(latDist, 100, lonDist);
+		// See http://www.convict.lu/Jeunes/Math/arctan.htm for atan on the RCX
+		// and the polynomial approximation in short integers.
+		*Brg =(-150 + 310*x - (x*x / 2) - (x*x / 3)) / 50;
+		if (lonDist > latDist)
+			*Brg = 900 - *Brg;
+		if (lat1 > lat2)
+			*Brg = 1800 - *Brg;
+		if (lon1 > lon2)
+			*Brg = 3600 - *Brg;
+	}
+
+	return round(sqrt(latDist * lonDist));
 }
 
 // vim: set sw=3 ts=3 noet nu:

@@ -265,15 +265,15 @@ void LcdDrawGBox_P(uint8_t row, uint8_t nRow, const char *pStr)
    row--;
 	int strLen = LCDStrLen(pStr, 0, SMALL);
 	// Topline w. text
-   LCDSetLine(117-row*10, 4, 117-row*10, 126-strLen-4, FG2);
-	LCDPutStr_p(pStr, 112-row*10, 126-strLen, SMALL, FG2, BG);
-   LCDSetLine(117-row*10, 128, 117-row*10, 129, FG2);
+   LCDSetLine(116-row*10,        4, 116-row*10, 126-strLen-4, FG2);
+	LCDPutStr_p(pStr, 111-row*10, 126-strLen, SMALL, FG2, BG);
+   LCDSetLine(116-row*10,      128, 116-row*10, 129, FG2);
 	// Left line
-   LCDSetLine(116-row*10, 3, 108-(row+nRow)*10, 3, FG2);
+   LCDSetLine(115-row*10,        3, 107-(row+nRow)*10, 3, FG2);
 	// Right line
-   LCDSetLine(116-row*10, 130, 108-(row+nRow)*10, 130, FG2);
+   LCDSetLine(115-row*10,      130, 107-(row+nRow)*10, 130, FG2);
 	// Bottom line
-   LCDSetLine(107-(row+nRow)*10, 4, 107-(row+nRow)*10, 129, FG2);
+   LCDSetLine(106-(row+nRow)*10, 4, 106-(row+nRow)*10, 129, FG2);
 }
 
 void RotInsertValue(uint16_t *arr, int val, uint8_t arrLen)

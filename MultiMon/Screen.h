@@ -5,10 +5,18 @@
 #define _Screen_h__
 
 #include <avr/io.h>
+#include <stdarg.h>
 
 #define NO_VAL 0xffff
 
-enum SCREEN {SCREEN_NAV = 0, SCREEN_BATT, SCREEN_GPS, SCREEN_CNFG, SCREEN_NUM};
+enum SCREEN {
+	SCREEN_NAV = 0,
+	SCREEN_BATT,
+	SCREEN_GPS,
+	SCREEN_ANCH,
+	SCREEN_CNFG,
+	SCREEN_NUM
+};
 extern uint8_t curScreen;
 
 #define CnvKt2Ms_I(N, D) (muldiv(N, 1852, 3600) / D)
@@ -66,8 +74,10 @@ extern uint16_t Cnfg_AWAOFF EEPROM;    // in deg
 extern uint16_t Cnfg_HOUSEAH EEPROM;   // in AH
 extern uint16_t Cnfg_PEUKERT EEPROM;   // in 1/1000
 
-void DoBuzzer(void);
-void ScreenUpdate(void);
-void ScreenUpdateInt(void);
+extern void DoBuzzer(void);
+extern void ScreenUpdate(void);
+extern void ScreenUpdateInt(void);
+
+extern void setAlarm_P(const char *str, ...);
 
 #endif

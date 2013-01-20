@@ -15,9 +15,16 @@
 #include <AvrXFifo.h>
 #include "SoftUart.h"
 #include "Serial.h"
+#include "Screen.h"
 #include "hardware.h"
 #include "util.h"
 
+#define SUART_MULFREQ 5
+#define SOFTBAUD 4800
+#define TCNT2_TOP (F_CPU/8/SUART_MULFREQ/SOFTBAUD)
+
+#define VHF_PAUSE_SEC 6
+#define VHF_PAUSE (SOFTBAUD * VHF_PAUSE_SEC)
 //
 // IN
 //
@@ -59,7 +66,7 @@ static struct SoftUartState
 } stIn[4];
 static uint8_t suEdgeTick[4];
 
-static struct SoftUartState stOut[2];
+static struct SoftUartState stOut[3];
 static Mutex suOut;
 
 static void SoftUartInInit(void)
@@ -77,6 +84,7 @@ static void SoftUartInInit(void)
 	stIn[0].buf = WindBuf;
 	stIn[1].buf = DepthBuf;
 	stIn[2].buf = VdoBuf;
+	stIn[3].buf = RdrBuf;
 
 #if 1
 	// Extern Ints 0,1,2
@@ -97,7 +105,8 @@ AVRX_SIGINT(USART_RXC_vect)
 	Epilog();
 }
 
-static int16_t vhfOnTime;
+static uint16_t vhfChanged;
+uint8_t vhfLast;
 
 // Hi speed timer for soft uart in & out at 4800 baud
 uint8_t suTick;
@@ -108,16 +117,20 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 
 	DoBuzzer();
 
-	if (++suTick >= 3) {
+	if (++suTick >= SUART_MULFREQ) {
 		suTick = 0;
 
-		if (SBIT(VHF_ON_RXPORT, VHF_ON_RXPIN))
-			vhfOnTime = secTick;
+		if (SBIT(VHF_ON_RXPORT, VHF_ON_RXPIN) ^ vhfLast) {
+			vhfLast = SBIT(VHF_ON_RXPORT, VHF_ON_RXPIN);
+			vhfChanged = 0;
+		}
+		else if (vhfChanged < VHF_PAUSE)
+			vhfChanged++;
 	}
 	
 	register uint8_t pin;
 	register uint8_t i = suTick;
-	if (i < 2 && stOut[i].state) {
+	if (i < 3 && stOut[i].state) {
 		// Drive the output
 
 		stOut[i].state--;
@@ -136,13 +149,12 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 			AvrXIntSetSemaphore(&suOut);
 			break;
 		}
-		if (0 == i) {
+		if (0 == i)
 			SBIT(SUART1_TXPORT, SUART1_TXPIN) = pin;
-			if (abs(secTick - vhfOnTime) > 5)
-				SBIT(VHF_PORT, VHF_UART) = pin;
-		}
-		else
+		else if (1 == i)
 			SBIT(SUART2_TXPORT, SUART2_TXPIN) = pin;
+		else if (vhfChanged >= VHF_PAUSE)
+			SBIT(VHF_PORT, VHF_UART) = pin;
 	}
 
 	// Drive the three soft uarts
@@ -159,7 +171,7 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 			}
 			if (stIn[i].state == 99 && 0 == pin) { // SUART4 has no interrupt -> polled
 				stIn[3].state = 10;
-				suEdgeTick[3] = (suTick+1)%3;
+				suEdgeTick[3] = (suTick+SUART_MULFREQ/2)%SUART_MULFREQ;
 				continue;
 			}
 			stIn[i].state--;
@@ -196,7 +208,7 @@ AVRX_SIGINT(INT0_vect)
 {
    IntProlog();                // Switch to kernel stack/context
 	BSET(LED_PORT, LED_DBG);
-	suEdgeTick[0] = (suTick+1)%3;
+	suEdgeTick[0] = (suTick+SUART_MULFREQ/2)%SUART_MULFREQ;
 	stIn[0].state = 10;
 	BCLR(GICR, INT0);
    Epilog();                   // Return to tasks
@@ -205,7 +217,7 @@ AVRX_SIGINT(INT1_vect)
 {
    IntProlog();                // Switch to kernel stack/context
 	BSET(LED_PORT, LED_DBG);
-	suEdgeTick[1] = (suTick+1)%3;
+	suEdgeTick[1] = (suTick+SUART_MULFREQ/2)%SUART_MULFREQ;
 	stIn[1].state = 10;
 	BCLR(GICR, INT1);
    Epilog();                   // Return to tasks
@@ -214,7 +226,7 @@ AVRX_SIGINT(INT2_vect)
 {
    IntProlog();                // Switch to kernel stack/context
 	BSET(LED_PORT, LED_DBG);
-	suEdgeTick[2] = (suTick+1)%3;
+	suEdgeTick[2] = (suTick+SUART_MULFREQ/2)%SUART_MULFREQ;
 	stIn[2].state = 10;
 	BCLR(GICR, INT2);
    Epilog();                   // Return to tasks
@@ -223,14 +235,16 @@ AVRX_SIGINT(INT2_vect)
 //
 // OUT
 //
-static char      NmeaFiOut[260];
-static pAvrXFifo pNmeaFiOut = (pAvrXFifo) NmeaFiOut;
-static char      NmIIFiOut[70];
+static char      NmeaGpsOut[260];
+static pAvrXFifo pNmeaGpsOut = (pAvrXFifo) NmeaGpsOut;
+static char      NmIIFiOut[40];
 static pAvrXFifo pNmIIFiOut = (pAvrXFifo) NmIIFiOut;
+static char      NmeaFiOut[99];
+static pAvrXFifo pNmeaFiOut = (pAvrXFifo) NmeaFiOut;
 
 void NmeaPutFifo(uint8_t f, char *s)
 {
-	register pAvrXFifo pf = 0==f ? pNmeaFiOut : pNmIIFiOut;
+	register pAvrXFifo pf = 0==f ? pNmeaFiOut : 1==f ? pNmIIFiOut : pNmeaGpsOut;
 	register uint8_t err = 0;
 
 	while (*s && *s != CR)  {
@@ -246,6 +260,11 @@ void NmeaPutFifo(uint8_t f, char *s)
 
 void Task_SoftUartOut(void)
 {
+   // Timer2 4800 baud soft uart timer
+   OCR2 = TCNT2_TOP;
+   BSET(TIMSK, OCIE2);
+   TCCR2 = BV(CS21)|BV(WGM21); // F_CPU/8 - CTC Mode
+
    SoftUartInInit();
 
 	BSET(SUART1_TXDDR, SUART1_TXPIN);
@@ -260,6 +279,10 @@ void Task_SoftUartOut(void)
 	stOut[1].buf = NmIIFiOut;
 	AvrXFlushFifo(pNmIIFiOut);
 	pNmIIFiOut->size = (uint8_t)sizeof(NmIIFiOut) - sizeof(AvrXFifo) + 1;
+
+	stOut[2].buf = NmeaGpsOut;
+	AvrXFlushFifo(pNmeaGpsOut);
+	pNmeaGpsOut->size = (uint8_t)(sizeof(NmeaGpsOut) - sizeof(AvrXFifo) + 1);
 
 	register uint8_t i;
 	for (;;) {

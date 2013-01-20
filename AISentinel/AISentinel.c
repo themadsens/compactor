@@ -330,7 +330,6 @@ int main(void)
 	TCCR0A = BIT(WGM01);   // 2.
 	TCCR0B = BIT(CS01);    // 2. 
 	TCCR1A = 0;            // 2.
-	TCCR1B = 0;            // 2.
 	TCCR1B = BIT(WGM12);   // 2.
 	OCR0A = BUZZER_TOP;    // 4.
 	OCR1AH = SERIAL_TOP>>8;// 4.

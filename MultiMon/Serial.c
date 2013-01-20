@@ -294,7 +294,7 @@ void Task_Serial(void)
 					sprintf_P(msg->buf+4, PSTR("MWV,%d.%d,R,%d.%d,N,A"),
 								 Nav_AWA/10, Nav_AWA%10,
 								 Nav_AWS/10, Nav_AWS%10);
-					NmeaGsvFifo(0, msg->buf+1);
+					NmeaPutFifo(0, msg->buf+1);
 					windTick = msTick;
 					bit = NAV_WIND;
 				}
@@ -313,8 +313,8 @@ void Task_Serial(void)
 			if (2 == n && 'C' == num[1]) {
 				atmpTick = msTick;
 				Nav_ATMP = num[0];
-				sprintf_P(msg->buf+4, PSTR("MDA,,,,,%d.%d,,,,,,,,,,,,,,,"), Nav_ATMP/10, Nav_ATMP%10);
-				NmeaGsvFifo(0, msg->buf+1);
+				sprintf_P(msg->buf+2, PSTR("WIMDA,,,,,%d.%d,C,,,,,,,,,,,,,,"), Nav_ATMP/10, Nav_ATMP%10);
+				NmeaPutFifo(0, msg->buf+1);
 				bit = NAV_ATMP;
 			}
 			break;
@@ -327,9 +327,9 @@ void Task_Serial(void)
 				dptTick = msTick;
 				Nav_DBS = num[0] + (AvrXReadEEPromWord(&Cnfg_DBSOFF)+5)/10;
 				sprintf_P(msg->buf+4, PSTR("DBS,,,%d.%d,M,,"), Nav_DBS/10, Nav_DBS%10);
-				NmeaGsvFifo(0, msg->buf);
+				NmeaPutFifo(0, msg->buf+1);
 				// Depth-as-waypoint to VDO Compass
-				sprintf_P(msg->buf+4, PSTR("BOD,,,,,DPT:%d.%dm,"), Nav_DBS/10, Nav_DBS%10);
+				sprintf_P(msg->buf+4, PSTR("HSC,%d.0,T,,,"), Nav_DBS);
 				NmeaPutFifo(1, msg->buf+1);
 				bit = NAV_DEPTH;
 			}
@@ -342,7 +342,7 @@ void Task_Serial(void)
 			if (2 == n && 'C' == num[1]) {
 				wtmpTick = msTick;
 				Nav_WTMP = num[0];
-				NmeaGsvFifo(0, msg->buf+1);
+				NmeaPutFifo(0, msg->buf+1);
 				bit = NAV_DEPTH;
 			}
 			break;
@@ -355,7 +355,7 @@ void Task_Serial(void)
 				stwTick = msTick;
 				Nav_STW = muldiv(num[0], Cnfg_STWFAC, 1000);
 				sprintf_P(msg->buf+4, PSTR("VHW,,,,,%d.%d,N,,"), Nav_STW/10, Nav_STW%10);
-				NmeaGsvFifo(0, msg->buf+1);
+				NmeaPutFifo(0, msg->buf+1);
 				bit = NAV_HDG;
 			}
 			break;
@@ -367,7 +367,7 @@ void Task_Serial(void)
 			if (1 == n && 'N' == num[1]) {
 				sumTick = msTick;
 				Nav_SUM = num[0];
-				NmeaGsvFifo(0, msg->buf+1);
+				NmeaPutFifo(0, msg->buf+1);
 			}
 			break;
 
@@ -375,10 +375,11 @@ void Task_Serial(void)
 		   // -- Compass: Heading
 		   // $IIHDM,999.9,M*hh
 			n = NmeaParse_P(PSTR(",I,C"), msg->buf+4, num);
-			if (1 == n && 'M' == num[1]) {
+			if (2 == n && 'M' == num[1]) {
 				hdgTick = msTick;
 				Nav_HDG = num[0];
-				NmeaGsvFifo(0, msg->buf+1);
+				sprintf_P(msg->buf+4, PSTR("HDG,%d.%d,,,,"), Nav_HDG/10, Nav_HDG%10);
+				NmeaPutFifo(0, msg->buf+1);
 			}
 			break;
 
@@ -403,16 +404,16 @@ void Task_Serial(void)
 					for (uint8_t i = 0; i < 4; i++)
 						SatSNR[(num[0]-1)*4 + i] = num[i+2];
 					BSET(Gps_redraw, GPS_SAT);
-					if (curScreen == SCREEN_GPS) 
+					if (curScreen == SCREEN_GPS || curScreen == SCREEN_ANCH) 
 						ScreenUpdate();
 				}
 			}
 			gsvTick = msTick;
-			NmeaPutFifo(0, msg->buf+1);
+			NmeaPutFifo(2, msg->buf+1);
 			break;
 		 case DEF(5,'R','M'):
 		   // $GPRMC,152828.000,A,3646.8279,N,01432.7178,E,0.00,272.30,081212,,,A*68
-			NmeaGsvFifo(0, msg->buf+1);
+			NmeaGsvFifo(2, msg->buf+1);
 			if (curScreen == SCREEN_GPS) {
 				if (NmeaParse_P(PSTR(",d,,L,L,I,I"), msg->buf+4, (uint16_t *)Gps_STR) == 5) {
 					ScreenUpdate();
