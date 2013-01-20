@@ -11,7 +11,7 @@
 // Normal string colors
 #define LCDPutStrM(S, X, Y) LCDPutStr((S), (X), (Y), MEDIUM, FG, BG)
 // Calc "box" offsets
-#define LcdBoxIntX_M(o, L)  (112 - 10*(L-1) - o)
+#define LcdBoxIntX_M(o, L)  (111 - 10*(L-1) - o)
 #define LcdBoxIntY_M(o)     (5 + o)
 // Clear box intenal area
 #define LcdClearGBoxInt_M(L, S) LCDSetRect(LcdBoxIntX_M(0, L + S), 4, \

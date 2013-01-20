@@ -25,7 +25,7 @@
  *
  * The task is resumed when data is available. A bitmask says what to redraw
  *
-*/
+ */
 #include <string.h>
 #include <avr/io.h>
 #include <avrx.h>
@@ -41,7 +41,7 @@
 
 
 
-static void showAlarm(const char *s, int sound);
+static void showAlarm(void);
 
 // --- GLOBALS
 int16_t   Nav_AWA;     // In degrees bows clockwise +-180
@@ -59,6 +59,9 @@ uint8_t   Nav_redraw;
 uint16_t DepthValues[HIST_LEN];
 uint16_t SpeedValues[HIST_LEN];
 static char buf[20];
+
+static char alarm[17];
+static uint8_t alarmShown;
 
 static uint8_t firstTime;
 #define LCDPutStrChkM(S, V, X, Y) LCDPutStrChk((S), (V), (X), (Y), MEDIUM, FG, BG)
@@ -115,18 +118,19 @@ static void ScreenRedrawNav(void)
 
 
 			sprintf_P(buf, PSTR("AWS: %2d.%dm/s"), CnvKt2Ms_I(Nav_AWS, 10) % 100,
-															 CnvKt2Ms_F(Nav_AWS, 10));
+															 abs(CnvKt2Ms_F(Nav_AWS, 10)));
 			LCDPutStrChkM(buf, Nav_AWS, LcdBoxIntX_M(10, 1), LcdBoxIntY_M(0));
 			if (showMaxwind) {
 				sprintf_P(buf, PSTR("MAX: %2d.%d"), CnvKt2Ms_I(maxWindCur, 10) % 100,
-																 CnvKt2Ms_F(maxWindCur, 10));
+																 abs(CnvKt2Ms_F(maxWindCur, 10)));
 			}
 			else
 				sprintf_P(buf, PSTR("AWA:  %03d"), Nav_AWA/10%1000);
 			LCDPutStrChkM(buf, Nav_AWA, LcdBoxIntX_M(20, 1), LcdBoxIntY_M(0));
 
 			// Draw that fancy little windmeter
-			LCDSetRect(LcdBoxIntX_M(30, 1), LcdBoxIntY_M(98), LcdBoxIntX_M(6, 1), LcdBoxIntY_M(122), 1, BG);
+			LCDSetRect(LcdBoxIntX_M(30, 1), LcdBoxIntY_M(98),
+						  LcdBoxIntX_M(6, 1), LcdBoxIntY_M(122), 1, BG);
 			LCDSetCircle(LcdBoxIntX_M(18, 1), LcdBoxIntY_M(110), 12, FG);
 			LCDSetCircle2C(LcdBoxIntX_M(18, 1), LcdBoxIntY_M(110), 12, RED, GREEN);
 			LCDSetCircle2C(LcdBoxIntX_M(18, 1), LcdBoxIntY_M(110), 13, RED, GREEN);
@@ -244,6 +248,38 @@ static void ScreenRedrawBatt(void)
 	}
 }
 
+static void ScreenInitAnch(void)
+{
+	BSET(Gps_redraw, GPS_POS);
+}
+
+uint16_t Anch_BRG;
+uint16_t Anch_RNG;
+uint16_t Anch_MAX;
+static uint8_t AncToggle;
+static void ScreenRedrawAnch(void)
+{
+	if (!SBIT(Gps_redraw, GPS_POS)) 
+		return;
+
+	BCLR(Gps_redraw, GPS_POS);
+	sprintf_P(buf, PSTR("B:%03d"), Anch_BRG/10);
+	LCDPutStrChkM(buf, Anch_RNG, LcdBoxIntX_M(10, 0), LcdBoxIntY_M(0));
+	sprintf_P(buf, PSTR("R:%02d"), muldiv(Anch_RNG, 1852, 10000));
+	LCDPutStrChkM(buf, Anch_RNG, LcdBoxIntX_M(10, 0), LcdBoxIntY_M(48));
+	sprintf_P(buf, PSTR("M:%02d"), Anch_MAX);
+	LCDPutStrChkM(buf, 0, LcdBoxIntX_M(10, 0), LcdBoxIntY_M(88));
+
+	// TRIGINT_MAX / 360 ~= 45.51 -- Keep it in 16bit!
+	register int deg = Anch_BRG/10;
+	register int8_t sin = trigint_sin8(deg * 45 + (deg * 51 / 100));
+	deg = (90 - deg + 360) % 360;
+	register int8_t cos = trigint_sin8(deg * 45 + (deg * 51 / 100));
+	LCDSetPixel(54 + muldiv(Anch_RNG, 1852L * cos, 20000),
+				   64 + muldiv(Anch_RNG, 1852L * sin, 20000), AncToggle ? BROWN : RED);
+	AncToggle ^= 1;
+}
+
 uint16_t Cnfg_AWSFAC  EEPROM =  990;   // in 1/1000
 uint16_t Cnfg_STWFAC  EEPROM = 1050;   // in 1/1000
 uint16_t Cnfg_DBSOFF  EEPROM =   80;   // in cm
@@ -320,10 +356,12 @@ static void ScreenRedrawGps(void)
 		buf[3] = '\0';
 		LCDPutStrChk(buf, SatHDOP, LcdBoxIntX_M(10, 2), LcdBoxIntY_M(40), MEDIUM, fg, BG);
 
-		LCDSetRect(LcdBoxIntX_M(10, 2), LcdBoxIntY_M(70), LcdBoxIntX_M(0, 2), LcdBoxIntY_M(120), 1, BG);
+		LCDSetRect(LcdBoxIntX_M(10, 2), LcdBoxIntY_M(70),
+					  LcdBoxIntX_M(0, 2), LcdBoxIntY_M(120), 1, BG);
 		for (register u8 i = 0; i < 12; i++) {
 			LCDSetRect(LcdBoxIntX_M(10, 2), LcdBoxIntY_M(70 + i*4), 
-						  LcdBoxIntX_M(10, 2) + MIN(SatSNR[i]/6, 10), LcdBoxIntY_M(72 + i*4), 1, FG);
+						  LcdBoxIntX_M(10, 2) + MIN(SatSNR[i]/6, 10), LcdBoxIntY_M(72 + i*4),
+						  1, FG);
 		}
 	}
 	if (SBIT(Gps_redraw, GPS_POS)) {
@@ -388,11 +426,11 @@ static void     *_ScrnButtonTick;
 static MessageQueue ScreenQueue;       // The message queue itself
 struct btnState {
 	int16_t  lastTickCs;
-	unsigned lastState:1;
-	unsigned isChanging:1;
+	unsigned lastState:8;
+	unsigned isChanging:8;
 
-	unsigned pressed:1;
-	unsigned longPress:1;
+	unsigned pressed:8;
+	unsigned longPress:8;
 } btnState[2];
 static int16_t lastPress;
 static int16_t lastFast;
@@ -451,7 +489,8 @@ void Task_ScreenButton(void)
 			btnSignal = _btnSignal;
 			AvrXSendMessage(&ScreenQueue, (pMessageControlBlock)&_ScrnButtonTick);
 		}
-		else if (abs(msTick - lastPress) >= 25000 && BTN_NOPRESS != btnSignal) { // 20 Sec timeout
+		else if (abs(msTick - lastPress) >= 25000 && BTN_NOPRESS != btnSignal) {
+			// 20 Sec timeout
 			btnSignal = BTN_NOPRESS;
 			AvrXSendMessage(&ScreenQueue, (pMessageControlBlock)&_ScrnButtonTick);
 		}
@@ -492,6 +531,7 @@ struct BtnState {
 /**
  * Button handling
  */
+static uint8_t alarmTest;
 static inline i8 ScreenButtonDo(void)
 {
 	register int i, j;
@@ -504,6 +544,10 @@ static inline i8 ScreenButtonDo(void)
 			bs.editing = 0;
 			bs.valEditing = 0;
 			return 1;
+		}
+		else if (!alarmTest) {
+			alarmTest = 1;
+			//setAlarm_P(PSTR("Alarm Test %d"), 1);
 		}
 		else if (!bs.powerOff && !bs.locked) {
 			bs.powerOff = 1;
@@ -580,7 +624,7 @@ static inline i8 ScreenButtonDo(void)
 			bs.editing = 0;
 		else {
 			bs.locked ^= 1;
-			lastScreen = 99;
+			LCDSetRect(126, 126, 129, 129, 1, bs.locked ? RED : BG); 
 		}
 		return 1;
 	 case BTNPRESS_2DOWN:
@@ -645,24 +689,52 @@ static inline i8 ScreenButtonDo(void)
 	return 0;
 }
 
-static void showAlarm(const char *s, int sound)
+void setAlarm_P(const char *str, ...)
 {
+	va_list ap;
+
+	va_start(ap, str);
+	vsnprintf_P(alarm, sizeof(alarm), str, ap);
+	alarmShown = 0;
+	ScreenUpdate();
+}
+
+static void showAlarm(void)
+{
+	if (alarmShown)
+		return;
+	alarmShown = 1;
+
 	if (bs.powerOff) {
 		LCD_ON();
 		bs.powerOff = 0;
 	}
 
-	//LCDSetRect();
+	LCDSetRect(120, 2, 131, 131, 1, RED);
+	LCDPutStr(alarm, 121, (130 - strlen(alarm)*8) / 2, MEDIUM, FG, RED);
 }
 
+static unsigned char buzCnt;
 void DoBuzzer(void)
 {
+	if (!*alarm)
+		return;
+
+	// Sound for 1/2 sec every 5 sec
+	if (abs(msTick % 5000) > 500)
+		return;                     
+
+	if (buzCnt++ > 3) { // 2400 hz
+		SBIT(BUZZER_PORT, BUZZER_PIN) ^= 1;
+		buzCnt = 0;
+	}
 }
 
 static const char S1[] PROGMEM = "NAV";
 static const char S2[] PROGMEM = "BAT";
 static const char S3[] PROGMEM = "GPS";
-static const char S4[] PROGMEM = "CFG";
+static const char S4[] PROGMEM = "ANC";
+static const char S5[] PROGMEM = "CFG";
 
 
 /** 
@@ -679,6 +751,7 @@ void Task_Screen(void)
 	BSET(BUTTON2_PU, BUTTON2_PIN);
 
 	BSET(LCDPOWER_DDR, LCDPOWER_PIN);
+	BSET(BUZZER_DDR, BUZZER_PIN);
 
 	LCD_ON();
 	lastScreen = 99;
@@ -689,36 +762,44 @@ void Task_Screen(void)
 		void *t = AvrXWaitMessage(&ScreenQueue);
 		if (t == &_ScrnButtonTick) {
 			btn = 1;
-			if (!ScreenButtonDo())
+			if (*alarm) {
+				*alarm = 0;
+				lastScreen = -1;
+			}
+			else if (!ScreenButtonDo())
 				continue;
 		}
 		else if (t == &_ScreenUpdFast) {
 			ScreenRedrawFast();
 			continue;
 		}
+		if (*alarm)
+			showAlarm();
 
 		if (curScreen != lastScreen) {
+			char y = 9 + curScreen*30;
 			lastScreen = curScreen;
 			firstTime = 1;
 			LCDSetRect(0,0,131,131, 1, BG); // Clear
 
 			// Draw header
-			LCDSetRect(121, 2, 131, 131, 0, FG);
-			LCDSetLine(131, 4, 131, 129, BG);
+			LCDSetRect(120, 3, 130, 130, 0, FG);
+			LCDSetLine(130, y-3, 130, y+27, BG);
 
 			for (int i = 0; i < 4; i++) {
 				int col = FG2;
-				char y = 9 + i*30;
-				if (i == curScreen) {
+				y = 9 + i*30;
+				if (i == (curScreen == SCREEN_CNFG ? SCREEN_ANCH : curScreen)) {
 					// Active tab
 					col = FG;
-					LCDSetLine(121, y-5, 121, y+29, BG);
-					LCDSetLine(121, y-5, 131, y-1, FG);
-					LCDSetLine(131, y-1, 131, y+25, FG);
-					LCDSetLine(131, y+25, 121, y+29, FG);
+					LCDSetLine(120, y-5, 120, y+29, BG);
+					LCDSetLine(120, y-5, 130, y-1, FG);
+					LCDSetLine(130, y-1, 130, y+25, FG);
+					LCDSetLine(130, y+25, 120, y+29, FG);
 				}
-				strcpy_P(buf, !i ? S1 : 1==i ? S2 : 2==i ? S3 : S4);
-				LCDPutStr(buf, 122, y, MEDIUM, col, BG);
+				strcpy_P(buf, 0==i ? S1 : 1==i ? S2 : 2==i ? S3 :
+							     curScreen == SCREEN_CNFG ? S5 : S4);
+				LCDPutStr(buf, 121, y, MEDIUM, col, BG);
 			}
 
 			if (bs.locked)
@@ -727,12 +808,14 @@ void Task_Screen(void)
 			if      (curScreen == SCREEN_NAV) ScreenInitNav();
 			else if (curScreen == SCREEN_BATT) ScreenInitBatt();
 			else if (curScreen == SCREEN_GPS) ScreenInitGps();
+			else if (curScreen == SCREEN_ANCH) ScreenInitAnch();
 			else if (curScreen == SCREEN_CNFG) ScreenInitCnfg();
 		}
 
 		if      (curScreen == SCREEN_NAV) ScreenRedrawNav();
 		else if (curScreen == SCREEN_BATT) ScreenRedrawBatt();
 		else if (curScreen == SCREEN_GPS) ScreenRedrawGps();
+		else if (curScreen == SCREEN_ANCH) ScreenRedrawAnch();
 		else if (curScreen == SCREEN_CNFG && btn) ScreenRedrawCnfg();
 		firstTime = 0;
 	}

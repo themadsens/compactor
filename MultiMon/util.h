@@ -8,6 +8,7 @@
 #ifndef _FMutil_h_
 #define _FMutil_h_
 #include <avrx.h> // sbi, cbi
+#include <math.h> // sbi, cbi
 
 // 			Access bits like variables:
 
@@ -38,7 +39,7 @@ struct bits {
 #define BIT(b) (1 << (b))
 
 inline i16 muldiv(i16 a, i16 b, i16 c) {
-    return (i16) a * (i32) b / c;
+    return round((double) a * b / c);
 }
 
 #define DEBUG(fmt, ...) printf_P(PSTR(fmt "\n"), ##__VA_ARGS__)
