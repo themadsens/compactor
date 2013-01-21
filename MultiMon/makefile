@@ -323,9 +323,9 @@ gccversion :
 	@$(CC) --version
 
 
-
 # Program the device.
 program: $(TARGET).hex $(TARGET).eep
+	echo "Size: "; $(ELFSIZE)
 	$(AVRDUDE) $(AVRDUDE_FLAGS) $(AVRDUDE_WRITE_FLASH) $(AVRDUDE_WRITE_EEPROM)
 
 reset:
@@ -449,10 +449,13 @@ clean_list :
 # Include the dependency files.
 -include $(wildcard $(OBJDIR)/*.dep)
 
+tags:
+	ctags -R . ..\trigint\ ..\..\avrx\avrx
+
 
 # Listing of phony targets.
 .PHONY : all begin finish end sizebefore sizeafter gccversion \
 build elf hex eep lss sym coff extcoff \
 clean clean_list program \
-debug reset
+debug reset tags
 

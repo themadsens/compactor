@@ -18,13 +18,6 @@
 #include "Screen.h"
 #include "hardware.h"
 #include "util.h"
-
-#define SUART_MULFREQ 5
-#define SOFTBAUD 4800
-#define TCNT2_TOP (F_CPU/8/SUART_MULFREQ/SOFTBAUD)
-
-#define VHF_PAUSE_SEC 6
-#define VHF_PAUSE (SOFTBAUD * VHF_PAUSE_SEC)
 //
 // IN
 //
@@ -105,7 +98,7 @@ AVRX_SIGINT(USART_RXC_vect)
 	Epilog();
 }
 
-static uint16_t vhfChanged;
+uint16_t vhfChanged;
 uint8_t vhfLast;
 
 // Hi speed timer for soft uart in & out at 4800 baud
@@ -153,7 +146,7 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 			SBIT(SUART1_TXPORT, SUART1_TXPIN) = pin;
 		else if (1 == i)
 			SBIT(SUART2_TXPORT, SUART2_TXPIN) = pin;
-		else if (vhfChanged >= VHF_PAUSE)
+		else //if (vhfChanged >= VHF_PAUSE)
 			SBIT(VHF_PORT, VHF_UART) = pin;
 	}
 
@@ -287,7 +280,7 @@ void Task_SoftUartOut(void)
 	register uint8_t i;
 	for (;;) {
 		AvrXWaitSemaphore(&suOut);
-		for (i = 0; i < 2; i++) {
+		for (i = 0; i < 3; i++) {
 			if (0 == stOut[i].state && FIFO_ERR!= AvrXPeekFifo((pAvrXFifo) stOut[i].buf)) {
 				stOut[i].ch = AvrXPullFifo((pAvrXFifo) stOut[i].buf);
 				stOut[i].state = 10;
