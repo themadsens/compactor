@@ -32,6 +32,7 @@
 #include <ctype.h>
 #include "hardware.h"
 #include "Screen.h"
+#include "SoftUart.h"
 #include "LCD.h"
 #include "util.h"
 #include "trigint_sin8.h"
@@ -39,6 +40,7 @@
 #define LCD_ON() (BSET(LCDPOWER_PORT, LCDPOWER_PIN), delay_ms(50), InitLcd()) 
 #define LCD_OFF() BCLR(LCDPOWER_PORT, LCDPOWER_PIN)
 
+static uint8_t powerOff;
 
 
 static void showAlarm(void);
@@ -407,6 +409,11 @@ static void ScreenRedrawFast(void)
 		}
 		LED_ActivityMask = 0;
 	}
+	LCDSetRect(2, 62, 4, 64, 1, powerOff ? RED : GREEN); 
+	LCDSetRect(2, 66, 4, 68, 1, 0 == vhfChanged ? BLUE : vhfChanged < VHF_PAUSE ? RED : GREEN);
+
+	sprintf_P(buf, PSTR("%5d"), vhfChanged);
+	LCDPutStr(buf, 2, 74, SMALL, FG, BG);
 }
 
 enum BTN {
@@ -447,8 +454,7 @@ void Task_ScreenButton(void)
 		delay_ms(5); 
 		if (abs(msTick - lastFast) > 80) {
 			lastFast = msTick;
-			if (curScreen >= SCREEN_GPS)
-				AvrXSendMessage(&ScreenQueue, (pMessageControlBlock)&_ScreenUpdFast);
+			AvrXSendMessage(&ScreenQueue, (pMessageControlBlock)&_ScreenUpdFast);
 		}
 
 		register uint8_t _btnSignal = 0;
@@ -519,7 +525,6 @@ uint8_t curScreen;
 static uint8_t lastScreen;
 struct BtnState {
 	unsigned char locked     ;//:1;
-	unsigned char powerOff   ;//:1;
 	unsigned char editing    ;//:1;
 	unsigned char valEditing ;//:1;
 	unsigned char fieldNo    ;//:3;
@@ -531,7 +536,7 @@ struct BtnState {
 /**
  * Button handling
  */
-static uint8_t alarmTest;
+//static uint8_t alarmTest;
 static inline i8 ScreenButtonDo(void)
 {
 	register int i, j;
@@ -545,12 +550,14 @@ static inline i8 ScreenButtonDo(void)
 			bs.valEditing = 0;
 			return 1;
 		}
+#if 0
 		else if (!alarmTest) {
 			alarmTest = 1;
-			//setAlarm_P(PSTR("Alarm Test %d"), 1);
+			setAlarm_P(PSTR("Alarm Test %d"), 1);
 		}
-		else if (!bs.powerOff && !bs.locked) {
-			bs.powerOff = 1;
+#endif
+		else if (!powerOff && !bs.locked) {
+			powerOff = 1;
 			bs.editing = 0;
 			bs.valEditing = 0;
 			LCD_OFF();
@@ -558,8 +565,8 @@ static inline i8 ScreenButtonDo(void)
 		break;
 	 case BTNPRESS_1UP:
 		// Power-on, Browse screens, Rotate digit or Cancel
-		if (bs.powerOff) {
-			bs.powerOff = 0;
+		if (powerOff) {
+			powerOff = 0;
 			LCD_ON();
 			lastScreen = 99;
 		}
@@ -581,7 +588,7 @@ static inline i8 ScreenButtonDo(void)
 		curScreen = (curScreen ? curScreen : SCREEN_NUM) - 1;
 		return 1;
 	 case BTNPRESS_2UP:
-		if (bs.powerOff)
+		if (powerOff)
 			return 0;
 		// Select field or digit to edit.
 		if (SCREEN_BATT == curScreen) { // Redraw number
@@ -617,7 +624,7 @@ static inline i8 ScreenButtonDo(void)
 	 case BTNPRESS_1DOWN:
 		break;
 	 case BTNPRESS_1LONG:
-		if (bs.powerOff)
+		if (powerOff)
 			return 0;
 		// Toggle lock screen or cancel edit
 		if (bs.editing)
@@ -705,9 +712,9 @@ static void showAlarm(void)
 		return;
 	alarmShown = 1;
 
-	if (bs.powerOff) {
+	if (powerOff) {
 		LCD_ON();
-		bs.powerOff = 0;
+		powerOff = 0;
 	}
 
 	LCDSetRect(120, 2, 131, 131, 1, RED);

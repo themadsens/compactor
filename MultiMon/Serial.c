@@ -326,7 +326,7 @@ void Task_Serial(void)
 			if (2 == n && 'M' == num[1]) {
 				dptTick = msTick;
 				Nav_DBS = num[0] + (AvrXReadEEPromWord(&Cnfg_DBSOFF)+5)/10;
-				sprintf_P(msg->buf+4, PSTR("DBS,,,%d.%d,M,,"), Nav_DBS/10, Nav_DBS%10);
+				sprintf_P(msg->buf+4, PSTR("DPT,%d.%d,"), Nav_DBS/10, Nav_DBS%10);
 				NmeaPutFifo(0, msg->buf+1);
 				// Depth-as-waypoint to VDO Compass
 				sprintf_P(msg->buf+4, PSTR("HSC,%d.0,T,,,"), Nav_DBS);
