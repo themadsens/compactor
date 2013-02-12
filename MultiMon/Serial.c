@@ -132,7 +132,7 @@ static uint8_t NmeaParse_P(const char *spec, const char *str, uint16_t *res)
 					break;
 			}
 			if ('I'==c && i < 2)
-				*res = *res * 10;
+				return n; // No dec point -> ERROR; Alternatively: *res = *res * 10;
 			*res *= sign;
 			n++;
 			res++;
@@ -214,6 +214,21 @@ static inline void TllToVDM(char *buf)
 	oldPosSec = secTick;
 }
 
+static uint16_t m1,m2,m3;
+static uint16_t medianFilter(uint16_t v)
+{
+	m1 = m2;
+	m2 = m3;
+	m3 = v;
+
+	if ((m1 > m2 && m1 < m3) || (m1 < m2 && m1 > m3))
+		return m1;
+	else if ((m2 > m1 && m2 < m3) || (m2 < m1 && m2 > m3))
+		return m2;
+	else
+		return m3;
+}
+
 #define DEF(a,b,c) ((a-1)<<14 | (b&0x7f)<<7 | (c&0x7f))
 
 static NmeaBuf *msg;
@@ -246,40 +261,49 @@ void Task_Serial(void)
 		AvrXCancelTimerMessage(&tmb, &SerialQ);
 		LED_ActivityMask |= BV(msg->id - 1);
 
-		bit = 99;
+		bit = 0;
 
-		if (msTick - windTick > 30000) {
+		if (msTick - windTick > 5000) {
 			Nav_AWA = Nav_AWS = NO_VAL;
-			bit = NAV_WIND;
+			bit |= BV(NAV_WIND);
 		}
-		if (msTick - atmpTick > 30000) {
+		if (msTick - atmpTick > 5000) {
 			Nav_ATMP = NO_VAL;
-			bit = NAV_ATMP;
+			bit |= BV(NAV_ATMP);
 		}
-		if (msTick - dptTick > 30000) {
+		if (msTick - dptTick > 5000) {
 			Nav_DBS = NO_VAL;
-			bit = NAV_DEPTH;
+			bit |= BV(NAV_DEPTH);
 		}
-		if (msTick - stwTick > 30000) {
+		if (msTick - stwTick > 5000) {
 			Nav_STW = NO_VAL;
-			bit = NAV_HDG;
+			bit |= BV(NAV_HDG);
 		}
-		if (msTick - wtmpTick > 30000) {
+		if (msTick - wtmpTick > 5000) {
 			Nav_WTMP = NO_VAL;
-			bit = NAV_DEPTH;
+			bit |= BV(NAV_DEPTH);
 		}
-		if (msTick - sumTick > 30000) {
+		if (msTick - sumTick > 5000) {
 			Nav_SUM = NO_VAL;
-			bit = NAV_HDG;
+			bit |= BV(NAV_HDG);
 		}
-		if (msTick - hdgTick > 30000) {
+		if (msTick - hdgTick > 5000) {
 			Nav_HDG = NO_VAL;
-			bit = NAV_HDG;
+			bit |= BV(NAV_HDG);
 		}
-		if (msTick - gsvTick > 30000) {
+		if (msTick - gsvTick > 5000) {
 			SatHDOP = NO_VAL;
 			memset(SatSNR, 0, 12*sizeof(*SatSNR));
 		}
+		if (bit) {
+			Nav_redraw |= bit;
+			if (curScreen == SCREEN_NAV) 
+				ScreenUpdate();
+		}
+		if (msg == (NmeaBuf *) &tmb)
+			continue;
+
+		bit = 99;
 
 		switch (DEF(msg->id, msg->buf[4], msg->buf[5])) {
 		 case DEF(1, 'M', 'W'):
@@ -297,12 +321,15 @@ void Task_Serial(void)
 					NmeaPutFifo(0, msg->buf+1);
 					windTick = msTick;
 					bit = NAV_WIND;
-				}
 
-				 if (Nav_AWS > maxWind[0])
-					maxWind[0] = Nav_AWS;
-				 if (Nav_AWS > maxWindCur)
-					maxWindCur = Nav_AWS;
+					uint16_t f = medianFilter(Nav_AWS);
+					if (f > maxWind[0])
+						maxWind[0] = f;
+					if (f > maxWindCur) {
+						maxWindCur = f;
+						maxWindAgo = 0;
+					}
+				}
 			}
 			break;
 
@@ -368,6 +395,7 @@ void Task_Serial(void)
 				sumTick = msTick;
 				Nav_SUM = num[0];
 				NmeaPutFifo(0, msg->buf+1);
+				bit = NAV_HDG;
 			}
 			break;
 
@@ -375,11 +403,18 @@ void Task_Serial(void)
 		   // -- Compass: Heading
 		   // $IIHDM,999.9,M*hh
 			n = NmeaParse_P(PSTR(",I,C"), msg->buf+4, num);
+			if (n < 1) {
+				n = NmeaParse_P(PSTR(",D,C"), msg->buf+4, num);
+				if (2 == n && 'M' == num[1]) {
+					num[0] *= 10;
+				}
+			}
 			if (2 == n && 'M' == num[1]) {
 				hdgTick = msTick;
 				Nav_HDG = num[0];
 				sprintf_P(msg->buf+4, PSTR("HDG,%d.%d,,,,"), Nav_HDG/10, Nav_HDG%10);
 				NmeaPutFifo(0, msg->buf+1);
+				bit = NAV_HDG;
 			}
 			break;
 
