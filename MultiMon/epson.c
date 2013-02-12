@@ -88,6 +88,22 @@
             WriteSpiData((color) & 0xFF); \
         } while (0)
 
+#define WriteSpiBit(data, bit) do { \
+            BCLR(LCD_PORT, LCD_PIN_CLOCK); \
+            if (data & BV(bit)) \
+              BSET(LCD_PORT, LCD_PIN_DATA); \
+            else \
+              BCLR(LCD_PORT, LCD_PIN_DATA); \
+            BSET(LCD_PORT,  LCD_PIN_CLOCK); \
+            __asm__ __volatile__("nop"); \
+        } while (0)
+
+//define WriteSpiBit(data, bit) do { \
+            BCLR(LCD_PORT, LCD_PIN_CLOCK); \
+            SBIT(LCD_PORT, LCD_PIN_DATA) = SBIT(data, bit); \
+            BSET(LCD_PORT,  LCD_PIN_CLOCK); \
+            __asm__ __volatile__("nop"); \
+        } while (0)
 
 // *****************************************************************************
 // WriteSpiCommand.c
@@ -100,8 +116,6 @@
 // Author: Olimex, James P Lynch August 30, 2007
 // *****************************************************************************
 void WriteSpiCommand(byte command) {
-  byte i;
-  
   // Enable chip
   BCLR(LCD_PORT, LCD_PIN_CLOCK);
   BCLR(LCD_PORT, LCD_PIN_CS);
@@ -111,26 +125,17 @@ void WriteSpiCommand(byte command) {
   BSET(LCD_PORT,  LCD_PIN_CLOCK);
   
   // Clock out the 8 bits MSB first  
-  for (i=0; i<8; i++) {
+  WriteSpiBit(command, 7);
+  WriteSpiBit(command, 6);
+  WriteSpiBit(command, 5);
+  WriteSpiBit(command, 4);
+  WriteSpiBit(command, 3);
+  WriteSpiBit(command, 2);
+  WriteSpiBit(command, 1);
+  WriteSpiBit(command, 0);
 
-    BCLR(LCD_PORT, LCD_PIN_CLOCK);
-
-    // Set the data bit
-    if (command & 0x80) {
-      BSET(LCD_PORT, LCD_PIN_DATA);
-    } else {
-      BCLR(LCD_PORT, LCD_PIN_DATA);
-    }
-    // Toggle the clock
-    BSET(LCD_PORT,  LCD_PIN_CLOCK);
-    
-    // Expose the next bit
-    command = command << 1;
-  }
-
-  // Deslect chip  
+  // Deselect chip  
   BSET(LCD_PORT, LCD_PIN_CS);
-    
 }
 
 
@@ -146,8 +151,6 @@ void WriteSpiCommand(byte command) {
 // Modified by Skye Sweeney February 2011
 // *****************************************************************************
 void WriteSpiData(byte data) {
-  byte i;
-  
   // Enable chip
   BCLR(LCD_PORT, LCD_PIN_CLOCK);
   BCLR(LCD_PORT, LCD_PIN_CS);
@@ -157,26 +160,17 @@ void WriteSpiData(byte data) {
   BSET(LCD_PORT,  LCD_PIN_CLOCK);
   
   // Clock out the 8 bits MSB first  
-  for (i=0; i<8; i++) {
+  WriteSpiBit(data, 7);
+  WriteSpiBit(data, 6);
+  WriteSpiBit(data, 5);
+  WriteSpiBit(data, 4);
+  WriteSpiBit(data, 3);
+  WriteSpiBit(data, 2);
+  WriteSpiBit(data, 1);
+  WriteSpiBit(data, 0);
 
-    BCLR(LCD_PORT, LCD_PIN_CLOCK);
-
-    // Set the data bit
-    if (data & 0x80) {
-      BSET(LCD_PORT, LCD_PIN_DATA);
-    } else {
-      BCLR(LCD_PORT, LCD_PIN_DATA);
-    }
-    // Toggle the clock
-    BSET(LCD_PORT,  LCD_PIN_CLOCK);
-    
-    // Expose the next bit
-    data = data << 1;
-  }
-
-  // Deslect chip  
+  // Deselect chip  
   BSET(LCD_PORT, LCD_PIN_CS);
-  
 }
 
 

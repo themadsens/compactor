@@ -27,7 +27,7 @@
 #include "Serial.h"
 #include "SoftUart.h"
 #include "WindOut.h"
-#include "BattStat.h"
+//#include "BattStat.h"
 #include "util.h"
 #include "hardware.h"
 
@@ -72,6 +72,7 @@ AVRX_SIGINT(TIMER0_COMP_vect)
 			 for (register u8 i = 0; i < 24; i++) {
 				 if (maxWind[i] > maxWindCur) {
 					  maxWindCur = maxWind[i];
+					  maxWindAgo = i;
 				  }
 			  }
 		 }
@@ -82,36 +83,16 @@ AVRX_SIGINT(TIMER0_COMP_vect)
 }
 
 
-#if 0
-AVRX_SIGINT(BADISR_vect)
-{
-   IntProlog();                // Switch to kernel stack/context
-	DEBUG("\n  -- BAD INT --\n");
-   Epilog();                   // Return to tasks
-}
-#endif
-
 // Debug out (stdout)
 uint8_t bufStdOut[90];
 pAvrXFifo pStdOut = (pAvrXFifo) bufStdOut;
-
-#if 0
-static void Task_Idle(void)
-{
-	for (;;) {
-      BCLR(LED_PORT, LED_DBG);
-		sleep_mode();
-	}
-}
-AVRX_GCC_TASK( Task_Idle,        10,  9);
-#endif
 
 // Task declarations -- Falling priority order
 AVRX_GCC_TASK( Task_SoftUartOut,  20,  1);
 AVRX_GCC_TASK( Task_ScreenButton, 20,  2);
 AVRX_GCC_TASK( Task_Serial,      100,  4);
 AVRX_GCC_TASK( Task_WindOut,      20,  5);
-AVRX_GCC_TASK( Task_BattStat,     20,  5);
+//AVRX_GCC_TASK( Task_BattStat,     20,  5);
 AVRX_GCC_TASK( Task_Screen,      100,  6);
 
 #define RUN(T) (AvrXRunTask(TCB(T)))
@@ -134,10 +115,11 @@ int main(void)
    UBRRH = UBRRH_VALUE;
    UBRRL = UBRRL_VALUE;
 #if USE2X
-   UCSRA |= BV(U2X);			    //Might double the UART Speed
+   BSET(UCSRA, U2X);			       //Might double the UART Speed
 #endif
    UCSRB = BV(RXEN)|BV(RXCIE);	 //Enable Rx in UART + IEN
    UCSRC = BV(UCSZ0)|BV(UCSZ1)|BV(URSEL);  //8-Bit Characters
+	BSET(UCSRB, TXEN);                      //Hand over pin to Uart
    stdout = &mystdout; //Required for printf init
 
 	BSET(LED_PORT, LED_DBG);
@@ -153,19 +135,16 @@ int main(void)
 	// Start tasks
    RUN(Task_Screen);
    RUN(Task_ScreenButton);
-#if 0
-   RUN(Task_Idle);
-#endif
    RUN(Task_Serial);
    RUN(Task_SoftUartOut);
-   RUN(Task_BattStat);
+//   RUN(Task_BattStat);
    RUN(Task_WindOut);
 
    Epilog();                   // Fall into kernel & start first task
 
 	for (;;);
 }
-
+void BeginIdleHook(void) { BCLR(LED_PORT, LED_DBG); }
 
 void delay_ms(int x)
 {
@@ -187,7 +166,6 @@ static int uart_putchar(char c, FILE *stream)
 	AvrXPutFifo(pStdOut, c);
 	EndCritical();
 	if (SBIT(UCSRA, UDRE)) {
-		BSET(UCSRB, TXEN);                      //Hand over pin to Uart
 		UDR = AvrXPullFifo(pStdOut);
 		BSET(UCSRB, TXCIE);                     //Enable TX empty Intr.
 	}
@@ -202,7 +180,6 @@ AVRX_SIGINT(USART_TXC_vect)
 	int16_t ch = AvrXPullFifo(pStdOut);
 	if (FIFO_ERR == ch) {
 		BCLR(UCSRB, TXCIE);
-		BCLR(UCSRB, TXEN); //Hand over to GPIO (Debug LED) until next tx
 	}
 	else
 		UDR = ch;

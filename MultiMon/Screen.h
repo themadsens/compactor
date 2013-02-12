@@ -11,11 +11,11 @@
 
 enum SCREEN {
 	SCREEN_NAV = 0,
-	SCREEN_BATT,
 	SCREEN_GPS,
 	SCREEN_ANCH,
 	SCREEN_CNFG,
-	SCREEN_NUM
+	SCREEN_NUM,
+	SCREEN_BATT=99,
 };
 extern uint8_t curScreen;
 
@@ -33,6 +33,7 @@ extern int16_t   Nav_HDG;     // In degrees 0..360
 extern uint16_t  Nav_SUM;
 
 extern uint16_t maxWind[24];
+extern uint8_t maxWindAgo;
 extern uint16_t maxWindCur;
 
 #define NAV_WIND  0

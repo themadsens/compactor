@@ -450,7 +450,7 @@ clean_list :
 -include $(wildcard $(OBJDIR)/*.dep)
 
 tags:
-	ctags -R . ..\trigint\ ..\..\avrx\avrx
+	ctags --languages=+Asm -R . ..\trigint\ ..\..\avrx\avrx
 
 
 # Listing of phony targets.

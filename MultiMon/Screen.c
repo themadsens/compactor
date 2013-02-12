@@ -98,8 +98,9 @@ static void LCDPutStrChk(char *str, int16_t val, byte x, byte y_, int sz, int fg
 }
 
 static int8_t windTick;
-static uint8_t showMaxwind;
+static uint8_t showWindAngle;
 uint16_t maxWind[24];
+uint8_t maxWindAgo;
 uint16_t maxWindCur;
 static void ScreenInitNav(void)
 {
@@ -107,7 +108,6 @@ static void ScreenInitNav(void)
    LcdDrawGBox_P(5, 3, PSTR("SPEED"));
    LcdDrawGBox_P(9, 2, PSTR("DEPTH"));
 	windTick = msTick - 500;
-	showMaxwind = 0;
 	Nav_redraw = 0xff;
 }
 
@@ -122,13 +122,20 @@ static void ScreenRedrawNav(void)
 			sprintf_P(buf, PSTR("AWS: %2d.%dm/s"), CnvKt2Ms_I(Nav_AWS, 10) % 100,
 															 abs(CnvKt2Ms_F(Nav_AWS, 10)));
 			LCDPutStrChkM(buf, Nav_AWS, LcdBoxIntX_M(10, 1), LcdBoxIntY_M(0));
-			if (showMaxwind) {
+			if (showWindAngle)
+				sprintf_P(buf, PSTR("AWA:  %03d"), Nav_AWA/10%1000);
+			else
 				sprintf_P(buf, PSTR("MAX: %2d.%d"), CnvKt2Ms_I(maxWindCur, 10) % 100,
 																 abs(CnvKt2Ms_F(maxWindCur, 10)));
-			}
-			else
-				sprintf_P(buf, PSTR("AWA:  %03d"), Nav_AWA/10%1000);
 			LCDPutStrChkM(buf, Nav_AWA, LcdBoxIntX_M(20, 1), LcdBoxIntY_M(0));
+			if (!showWindAngle) {
+				sprintf_P(buf, PSTR("AGO: %2dH  "), maxWindAgo);
+				LCDPutStrChkM(buf, Nav_AWS, LcdBoxIntX_M(30, 1), LcdBoxIntY_M(0));
+			}
+#if 0
+			sprintf_P(buf, PSTR("%5d"), maxWindCur);
+			LCDPutStr(buf, 2, 74, SMALL, FG, BG);
+#endif
 
 			// Draw that fancy little windmeter
 			LCDSetRect(LcdBoxIntX_M(30, 1), LcdBoxIntY_M(98),
@@ -148,19 +155,21 @@ static void ScreenRedrawNav(void)
 	}
 	if (SBIT(Nav_redraw, NAV_ATMP)) {
 		BCLR(Nav_redraw, NAV_ATMP);
-		sprintf_P(buf, PSTR("TMP: %2d.%dC"), Nav_ATMP/10%100, abs(Nav_ATMP%10));
-		LCDPutStrChkM(buf, Nav_ATMP, LcdBoxIntX_M(30, 1), LcdBoxIntY_M(0));
+		if (showWindAngle) {
+			sprintf_P(buf, PSTR("TMP: %2d.%dC"), Nav_ATMP/10%100, abs(Nav_ATMP%10));
+			LCDPutStrChkM(buf, Nav_ATMP, LcdBoxIntX_M(30, 1), LcdBoxIntY_M(0));
+		}
 	}
 
 	if (SBIT(Nav_redraw, NAV_HDG)) {
 		//RotInsertValue(SpeedValues, Nav_STW, HIST_LEN);
 		BCLR(Nav_redraw, NAV_HDG);
 
-		sprintf_P(buf, PSTR("STW: %2d.%02dK"), Nav_STW/100%100, Nav_STW%100);
+		sprintf_P(buf, PSTR("STW:  %2d.%dKt"), Nav_STW/10%100, Nav_STW%10);
 		LCDPutStrChkM(buf, Nav_STW, LcdBoxIntX_M(10, 5), LcdBoxIntY_M(0));
 		sprintf_P(buf, PSTR("HDG:   %03d"), Nav_HDG/10%1000);
 		LCDPutStrChkM(buf, Nav_HDG, LcdBoxIntX_M(20, 5), LcdBoxIntY_M(0));
-		sprintf_P(buf, PSTR("LOG: %5dM"), Nav_SUM);
+		sprintf_P(buf, PSTR("LOG: %5dNM"), Nav_SUM);
 		LCDPutStrChkM(buf, Nav_SUM, LcdBoxIntX_M(30, 5), LcdBoxIntY_M(0));
 		//LcdDrawGraph(SpeedValues, 0, LcdBoxIntX_M(22, 5), LcdBoxIntY_M(94),
 		//				 16, HIST_LEN);
@@ -179,6 +188,7 @@ static void ScreenRedrawNav(void)
 	}
 }
 
+#if 0
 uint16_t  Batt_VHOUSE;     // In 1/10 Volt
 uint16_t  Batt_VENGINE;    // In 1/10 Volt
 uint16_t  Batt_IHOUSE;     // In 1/10 Amps
@@ -194,18 +204,22 @@ static void ShowBattReset(int fg, int bg)
 	strcpy_P(buf, S_reset);
 	LCDPutStr(buf, LcdBoxIntX_M(10, 8), LcdBoxIntY_M(0), MEDIUM, fg, bg);
 }
+#endif
 
 static void ScreenInitBatt(void)
 {
+#if 0
    LcdDrawGBox_P(2, 2, PSTR("VOLTAGE"));
    LcdDrawGBox_P(5, 2, PSTR("LOAD/CHG"));
    LcdDrawGBox_P(8, 2, PSTR("STATE"));
 	ShowBattReset(FG, BG);
 	Batt_redraw = 0xff;
+#endif
 }
 
 static void ScreenRedrawBatt(void)
 {
+#if 0
 	if (SBIT(Batt_redraw, BATT_VHOUSE)) {
 		BCLR(Batt_redraw, BATT_VHOUSE);
 		// Voltage
@@ -248,6 +262,7 @@ static void ScreenRedrawBatt(void)
 		sprintf_P(buf, PSTR("TEMP:  %2d.%dC"), Batt_TEMP/10, Batt_TEMP%10);
 		LCDPutStrChkM(buf, Batt_TEMP, LcdBoxIntX_M(20, 8), LcdBoxIntY_M(0));
 	}
+#endif
 }
 
 static void ScreenInitAnch(void)
@@ -282,7 +297,7 @@ static void ScreenRedrawAnch(void)
 	AncToggle ^= 1;
 }
 
-uint16_t Cnfg_AWSFAC  EEPROM =  990;   // in 1/1000
+uint16_t Cnfg_AWSFAC  EEPROM = 1000;   // in 1/1000
 uint16_t Cnfg_STWFAC  EEPROM = 1050;   // in 1/1000
 uint16_t Cnfg_DBSOFF  EEPROM =   80;   // in cm
 uint16_t Cnfg_AWAOFF  EEPROM =    0;   // in deg
@@ -304,7 +319,7 @@ static void ScreenRedrawCnfg(void)
 	cnfg = AvrXReadEEPromWord(&Cnfg_AWSFAC);
 	sprintf_P(buf, PSTR("AWSFAC: %d.%03d"), cnfg/1000, cnfg%1000);
 	LCDPutStrM(buf, LcdBoxIntX_M(10, 1), LcdBoxIntY_M(0));
-	cnfg = AvrXReadEEPromWord(&Cnfg_DBSOFF);
+	cnfg = AvrXReadEEPromWord(&Cnfg_AWAOFF);
 	sprintf_P(buf, PSTR("AWAOFF: %03ddeg"), cnfg);
 	LCDPutStrM(buf, LcdBoxIntX_M(20, 1), LcdBoxIntY_M(0));
 
@@ -409,11 +424,13 @@ static void ScreenRedrawFast(void)
 		}
 		LED_ActivityMask = 0;
 	}
+#if 0
 	LCDSetRect(2, 62, 4, 64, 1, powerOff ? RED : GREEN); 
 	LCDSetRect(2, 66, 4, 68, 1, 0 == vhfChanged ? BLUE : vhfChanged < VHF_PAUSE ? RED : GREEN);
 
 	sprintf_P(buf, PSTR("%5d"), vhfChanged);
 	LCDPutStr(buf, 2, 74, SMALL, FG, BG);
+#endif
 }
 
 enum BTN {
@@ -578,10 +595,13 @@ static inline i8 ScreenButtonDo(void)
 			bs.editNumber = (bs.editNumber/10*10) + (bs.editNumber%10 + 1)%10;
 			bs.editNumber = bs.editNumber * j + i;
 		}
-		else if (bs.editing)
+		else if (bs.editing) {
 			bs.editing = 0;
-		else 
+		}
+		else  {
 			curScreen = (curScreen+1) % SCREEN_NUM;
+			showWindAngle = 0;
+		}
 
 		return 1;
 	 case BTNPRESS_BOTH:
@@ -595,9 +615,10 @@ static inline i8 ScreenButtonDo(void)
 			LCDPutStr_p(PSTR("USED: "), LcdBoxIntX_M(10, 8), LcdBoxIntY_M(0), MEDIUM, FG, BG);
 		}
 		else if (SCREEN_NAV == curScreen) {
-			showMaxwind ^= 1;
+			showWindAngle ^= 1;
 			firstTime = 1; // Update lead text next time
 			BSET(Nav_redraw, NAV_WIND);
+			BSET(Nav_redraw, NAV_ATMP);
 			return 1;
 		}
 		else if (bs.valEditing) {
@@ -637,18 +658,21 @@ static inline i8 ScreenButtonDo(void)
 	 case BTNPRESS_2DOWN:
 		if (curScreen == SCREEN_BATT)
 			LCDPutStr_p(PSTR("RESET>"), LcdBoxIntX_M(10, 8), LcdBoxIntY_M(0), MEDIUM, FG, BG);
-		else if (curScreen == SCREEN_NAV && showMaxwind)
+		else if (curScreen == SCREEN_NAV && !showWindAngle)
 			LCDPutStr_p(PSTR("RESET"), LcdBoxIntX_M(20, 1), LcdBoxIntY_M(0), MEDIUM, FG, BG);
 		break;
 	 case BTNPRESS_2LONG:
 		// Start editing or Confirm editing
+#if 0
 		if (curScreen == SCREEN_BATT) { // Confirm reset
 			Batt_HOUSEAH = 0;
 			BSET(Batt_redraw, BATT_HOUSEAH);
 			firstTime = 1;
 			return 1;
 		}
-		else if (curScreen == SCREEN_NAV && showMaxwind) {
+		else
+#endif
+		if (curScreen == SCREEN_NAV && !showWindAngle) {
 			maxWindCur = 0;
 			memset(maxWind, 0, sizeof(maxWind));
 			BSET(Nav_redraw, NAV_WIND);
@@ -738,10 +762,10 @@ void DoBuzzer(void)
 }
 
 static const char S1[] PROGMEM = "NAV";
-static const char S2[] PROGMEM = "BAT";
-static const char S3[] PROGMEM = "GPS";
-static const char S4[] PROGMEM = "ANC";
-static const char S5[] PROGMEM = "CFG";
+static const char S2[] PROGMEM = "GPS";
+static const char S3[] PROGMEM = "ANC";
+static const char S4[] PROGMEM = "CFG";
+//static const char S2[] PROGMEM = "BAT";
 
 
 /** 
@@ -796,7 +820,7 @@ void Task_Screen(void)
 			for (int i = 0; i < 4; i++) {
 				int col = FG2;
 				y = 9 + i*30;
-				if (i == (curScreen == SCREEN_CNFG ? SCREEN_ANCH : curScreen)) {
+				if (i == curScreen) {
 					// Active tab
 					col = FG;
 					LCDSetLine(120, y-5, 120, y+29, BG);
@@ -804,8 +828,7 @@ void Task_Screen(void)
 					LCDSetLine(130, y-1, 130, y+25, FG);
 					LCDSetLine(130, y+25, 120, y+29, FG);
 				}
-				strcpy_P(buf, 0==i ? S1 : 1==i ? S2 : 2==i ? S3 :
-							     curScreen == SCREEN_CNFG ? S5 : S4);
+				strcpy_P(buf, 0==i ? S1 : 1==i ? S2 : 2==i ? S3 : S4);
 				LCDPutStr(buf, 121, y, MEDIUM, col, BG);
 			}
 
