@@ -47,7 +47,7 @@ CPUCLK	= 16000000L
 BAUDRATE= 19200
 TICKRATE= 1000
 
-PROJECT=MultiMon
+PROJECT=NmeaMux
 OBJDIR=obj
 
 # Output format. (can be srec, ihex, binary)
@@ -171,7 +171,6 @@ LDFLAGS = -Wl,-Map=$(TARGET).map,--cref
 LDFLAGS += $(EXTMEMOPTS)
 LDFLAGS += $(PRINTF_LIB) $(SCANF_LIB) $(MATH_LIB)
 
-
 # Programming support using avrdude. Settings and variables.
 
 # Programming hardware: alf avr910 avrisp bascom bsd
@@ -187,7 +186,7 @@ AVRDUDE_PROGRAMMER = dragon_jtag
 #AVRDUDE_PORT = com19    # programmer connected to serial device
 #AVRDUDE_BAUD = 38400
 AVRDUDE_PORT = usb     # programmer connected to serial device
-#AVRDUDE_BAUD = -b 19200
+AVRDUDE_BAUD = -b 115200
 
 AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
 AVRDUDE_WRITE_EEPROM = -U eeprom:w:$(TARGET).eep
@@ -416,6 +415,12 @@ $(OBJDIR)/%.o : %.S
 
 
 
+jtag1:   program
+arduino: program
+arduino jtag1: override AVRDUDE_PORT=com4
+arduino: override AVRDUDE_PROGRAMMER=arduino
+jtag1  : override AVRDUDE_PROGRAMMER=jtag1
+
 # Target: clean project.
 clean: begin clean_list finished end
 
@@ -450,7 +455,7 @@ clean_list :
 -include $(wildcard $(OBJDIR)/*.dep)
 
 tags:
-	ctags -R . ..\trigint\ ..\..\avrx\avrx
+	ctags --languages=+Asm -R . ..\trigint\ ..\..\avrx\avrx
 
 
 # Listing of phony targets.

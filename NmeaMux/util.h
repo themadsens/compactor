@@ -42,12 +42,25 @@ inline i16 muldiv(i16 a, i16 b, i16 c) {
     return round((double) a * b / c);
 }
 
+#define CRIT(x) do {BeginCritical(); x; EndCritical();} while(0)
+
 #define DEBUG(fmt, ...) printf_P(PSTR(fmt "\n"), ##__VA_ARGS__)
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 
-long CalcBrgRng(long lat, long lon);
+struct TimerEnt;
+typedef void (*TimerHandler) (struct TimerEnt *ent, void *inst);
+struct TimerEnt 
+{
+	struct TimerEnt *next;
+	uint16_t count;
+	TimerHandler handler;
+	void *instanceP;
+};
+void ClrTimer(struct TimerEnt *ent, uint8_t isInt);
+void AddTimer(struct TimerEnt *ent, uint16_t count,
+				  TimerHandler handler, void *instanceP, uint8_t isInt);
 
 extern int16_t msTick;
 extern uint16_t secTick;
