@@ -9,8 +9,9 @@
 #define SOFTBAUD 4800
 #define TCNT2_TOP (F_CPU/8/SUART_MULFREQ/SOFTBAUD)
 
-#define VHF_PAUSE_SEC 6
-#define VHF_PAUSE (SOFTBAUD * VHF_PAUSE_SEC)
+#define BAUDRATE     38400
+#define SER_SCALE 1
+#define SERIAL_TOP  (((F_CPU + BAUDRATE / 2) / BAUDRATE / SER_SCALE) - 1)
 
 typedef struct NmeaBuf {
 	pMutex  next;
@@ -25,6 +26,7 @@ extern uint16_t vhfChanged;
 
 // Uart Out
 void NmeaPutFifo(uint8_t f, char *s);
+int dbg_putchar(char c, FILE *stream);
 
 void Task_SoftUartOut(void);
 // vim: set sw=3 ts=3 noet nu:
