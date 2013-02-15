@@ -30,62 +30,53 @@
 //FIXME Relay only activated on every other test button press
 
 #include <stdint.h>
+#include <string.h>
 #include <avr/io.h>
 #include <avr/sleep.h>
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
-#include <avr/cpufunc.h>
+//#include <avr/cpufunc.h>
 #include "util.h"
 #include <util/delay.h>
 #define CPU_FREQ    F_CPU
 
-#if defined (__AVR_ATtiny24__)
+#define _NOP() __asm__ __volatile__("nop")
 
-#define BUZZER_PIN SBIT(PORTA, PORTA2)
+#if defined (__AVR_ATtiny24__) || defined (__AVR_ATtiny44__)
+
+#define BUZZER_PIN SBIT(PORTA, PA2)
 #define BUZZER_OUT SBIT(DDRA,  PA2)
-#define LED_ON(x) (SBIT(PORTB, PORTB2) = x ? 0 : 1)
+#define LED_ON(x) (SBIT(PORTB, PB2) = x ? 0 : 1)
 #define LED_OUT    SBIT(DDRB,  PB2)
-#define ACT_PIN    SBIT(PORTA, PORTA7)
+#define ACT_PIN    SBIT(PORTA, PA7)
 #define ACT_OUT    SBIT(DDRA,  PA7)
-#define RELAY_PIN  SBIT(PORTA, PORTA3)
+#define RELAY_PIN  SBIT(PORTA, PA3)
 #define RELAY_OUT  SBIT(DDRA,  PA3)
-#define DBG_PIN    SBIT(PORTA, PORTA5)
-#define DBG_OUT    SBIT(DDRA,  PA5)
-#define DBG2_PIN   SBIT(PORTA, PORTA6)
-#define DBG2_OUT   SBIT(DDRA,  PA6)
-#define DBG_SET(x) (DBG_PIN = x)
+#define PATRN_PIN  SBIT(PINA,  PA4)
+#define PATRN_PU   SBIT(PORTA, PA4)
+#define PULSE_PIN  SBIT(PINA,  PA5)
+#define PULSE_PU   SBIT(PORTA, PA5)
 #define BUTTON_PIN SBIT(PINA,  PA1)
-#define BUTTON_PU  SBIT(PORTA, PORTA1)
+#define BUTTON_PU  SBIT(PORTA, PA1)
 #define SRXD_PIN   SBIT(PINA,  PA0)
-#define SRXD_PU    SBIT(PORTA, PORTA0)
+#define SRXD_PU    SBIT(PORTA, PA0)
 #define SRXD_IEN   SBIT(PCMSK0,PCINT0)
 #define SER_SCALE  1
 #define ISR_LEAD   4 // Determined empiric @ 12 MHz FIXME
 
-#elif defined (__AVR_ATmega16__)
-#define BUZZER_PIN SBIT(PORTB, PORTB1)
-#define BUZZER_OUT SBIT(DDRD,  PB1)
-#define LED_ON(x) (SBIT(PORTB, PORTB0) = x ? 1 : 0)
-#define LED_OUT    SBIT(DDRB,  PB0)
-#define ACT_PIN    SBIT(PORTD, PORTD7)
-#define ACT_OUT    SBIT(DDRD,  PD7)
-#define RELAY_PIN  SBIT(PORTB, PORTB3)
-#define RELAY_OUT  SBIT(DDRB,  PB3)
-#define DBG_PIN    SBIT(PORTD, PORTD4)
-#define DBG2_OUT   SBIT(DDRD,  PD5)
-#define DBG2_PIN   SBIT(PORTD, PORTD5)
-#define DBG_OUT    SBIT(DDRD,  PD4)
-#define DBG_SET(x)(DBG_PIN = x)
-#define BUTTON_PIN SBIT(PIND,  PD6)
-#define BUTTON_PU  SBIT(PORTD, PORTD6)
-#define SRXD_PIN   SBIT(PIND,  PD3)
-#define SRXD_PU    SBIT(PORTD, PORTD3)
-#define SRXD_IEN   SBIT(GICR,  INT1)
-#define SER_SCALE  8
-#define ISR_LEAD   4 // Determined empiric @ 16 MHz
-
 #else
-#error "Must be one of ATtiny24 ATtiny44 ATmega16"
+#error "Must be one of ATtiny24 ATtiny44"
+#endif
+
+#define DBG_PIN    SBIT(PORTA, PA5)
+#define DBG_OUT    SBIT(DDRA,  PA5)
+#ifdef DEBUG
+#define DBG_SET(x) (DBG_PIN = x)
+#define DBG_INIT(x) (DBG_OUT = x)
+#else
+//#define DBG_SET(x) LED_ON(x)
+#define DBG_SET(x)
+#define DBG_INIT(x)
 #endif
 
 #define BAUDRATE     38400
@@ -127,7 +118,16 @@ uint32_t MmsiNo;
 
 void AISDecode(int ch)
 {
-	volatile uint32_t num = ch - (ch > 'W' ? 56 : 48);
+	volatile uint32_t num;
+	num = (uint16_t) strchr_P(AISLead, ch); //FIXME: Seems to fix compiler error
+#if 0
+			//DEBUG
+			if (NULL != strchr_P(AISLead, ch)) {
+				num = ch;
+				DBG_SET(1);
+			}
+#endif
+	num = ch - (ch > 'W' ? 56 : 48);
 	if (0 == (aisState & AIST_MMSI_MASK)) // First char in sequence 
 		num &= 0xf;                        // Clear repeat indicator
 	if (aisState < AIST_LEAD_MAX) {
@@ -161,8 +161,8 @@ void AISDecode(int ch)
 	else if (aisState == AIST_MMSI_CHECK + 5) {
 		MmsiNo |= num >> 4;
 		if (MmsiNo >= MMSI_LOW && MmsiNo <= MMSI_HIGH) {
-			if ((num & 0xf) != 15 || armTestPressed) // Test message only on
-				alarmCond();                          // recent button press
+			if ((num & 0xf) != 15 || armTestPressed) // Test message only issues alarm
+				alarmCond();                          // after recent button press
 			else {
 				LED_ON(1);
 				testTimer = 1;
@@ -191,16 +191,11 @@ static uint8_t srx_pending;
 static uint8_t srx_data;
 static uint8_t srx_state;
 
-#if defined (__AVR_ATtiny24__)
 ISR(TIM1_COMPA_vect)
-#elif defined (__AVR_ATmega16__)
-ISR(TIMER0_COMP_vect)
-#endif
 {
 	register uint8_t i;
 
 	srx_state--;
-	DBG_SET(srx_state & 1);
 	switch (srx_state)
 	{
 
@@ -212,7 +207,6 @@ ISR(TIMER0_COMP_vect)
 
 	 default:
 		i = srx_data >> 1;     // LSB first
-		DBG_SET(SRXD_PIN);
 		if (SRXD_PIN == 1)
 			i |= 0x80;          // data bit = 1
 		srx_data = i;
@@ -230,49 +224,27 @@ ISR(TIMER0_COMP_vect)
 		// Ie. Cancel any half-received on next level change
       SRXD_IEN = 1;
 		// Stop timer
-#if defined (__AVR_ATtiny24__)
 		TCCR1B &= ~BIT(CS10);
-#elif defined (__AVR_ATmega16__)
-		TCCR0 &= ~BIT(CS01);
-#endif
 		DBG_SET(1);
 	}
-	else
-		DBG_SET(srx_state & 1);
 }
 
 // Start bit detect ISR
-#if defined (__AVR_ATtiny24__)
 ISR(PCINT0_vect)
-#elif defined (__AVR_ATmega16__)
-ISR(INT1_vect)
-#endif
 {
 	// Scan again in 0.5 bit time. Scan in middle of bit
-#if defined (__AVR_ATtiny24__)
 #define LEAD ((SERIAL_TOP / 2) + ISR_LEAD)
    TCNT1H = LEAD >> 8;
    TCNT1L = LEAD  & 0xff;
-#elif defined (__AVR_ATmega16__)
-   TCNT0 = (SERIAL_TOP / 2) + ISR_LEAD;
-#endif
 	DBG_SET(0);
 
    SRXD_IEN = 0;                // Disable this interrupt until char RX
 	srx_state = 10;
 	// Start timer
-#if defined (__AVR_ATtiny24__)
 	TCCR1B |= BIT(CS10);
-#elif defined (__AVR_ATmega16__)
-	TCCR0 |= BIT(CS01);
-#endif
 }
 
-#if defined (__AVR_ATtiny24__)
 ISR(TIM0_COMPA_vect)
-#elif defined (__AVR_ATmega16__)
-ISR(TIMER2_COMP_vect)
-#endif
 {
 	if (buzzerOn) {
 		if (++buzzerCnt >= BuzzerTop) {
@@ -286,7 +258,7 @@ ISR(TIMER2_COMP_vect)
 	csecCnt++;
 }
 
-static inline u8 ugetchar( void )			// wait until byte received
+static inline u8 ugetchar(void)			// wait until byte received
 {
    while (!srx_pending)
       sleep_cpu();
@@ -294,17 +266,50 @@ static inline u8 ugetchar( void )			// wait until byte received
    return srx_cur;
 }
 
+static inline uint8_t hornPattern(void)
+{
+	if (1 == PATRN_PIN)
+		return upTime & 1;
+
+	switch (upTime % 22) {
+	 case 0:  return 1;
+	 case 1:  return 0;
+	 case 2:  return 1;
+	 case 3:  return 0;
+	 case 4:  return 1;
+	 case 5:  return 0;
+	 case 6:  return 1;
+	 case 7:  return 1;
+	 case 8:  return 0;
+	 case 9:  return 1;
+	 case 10: return 1;
+	 case 11: return 0;
+	 case 12: return 1;
+	 case 13: return 1;
+	 case 14: return 0;
+	 case 15: return 1;
+	 case 16: return 0;
+	 case 17: return 1;
+	 case 18: return 0;
+	 case 19: return 1;
+	 case 20: return 0;
+	 case 21: return 0;
+	}
+	return 0;
+}
+
+uint8_t relayOn;
 void alarmCond(void)
 {
 	if (!ALARM_ON) {
 		buzzerOn = 1;
-		RELAY_PIN= 1;
+		relayOn = 1;
 	}
 	alarmStart = upTime ?: 1;
 }
 
-uint8_t hsecCnt = 0;
-uint16_t btnPressed = 0;
+uint8_t hsecCnt;
+uint16_t btnPressed;
 int main(void)
 {
 	// Might save a few bytes here with a single assignment
@@ -314,8 +319,9 @@ int main(void)
 	RELAY_OUT  = 1;
 	BUTTON_PU  = 1;
 	SRXD_PU    = 1;
-	DBG_OUT    = 1;
-	DBG2_OUT   = 1;
+	PULSE_PU   = 1;
+	PATRN_PU   = 1;
+	DBG_INIT(1);
 
 	ACT_PIN = 0;
 	LED_ON(1);
@@ -324,7 +330,6 @@ int main(void)
 	// 2. Waveform Generation is CTC (Clear timer on compare) 
 	// 3. Timer connected to main clock. Prescale = 8
 	// 4. Timer running at baud rate  -- with interrupt enabled
-#if defined (__AVR_ATtiny24__)
 	MCUCR = BIT(ISC01);    // 1.
 	GIMSK = BIT(PCIE0);    // 1.
 	TCCR0A = BIT(WGM01);   // 2.
@@ -336,16 +341,6 @@ int main(void)
 	OCR1AL = SERIAL_TOP&0xff;// 4.
 	TIMSK0 = BIT(OCIE0A);  // 4.
 	TIMSK1 = BIT(OCIE1A);  // 4.
-#elif defined (__AVR_ATmega16__)
-	MCUCR = BIT(ISC10);    // 1.
-	TCCR0 = BIT(WGM01);    // 2.
-	TCCR2 = BIT(WGM21)     // 2.
-	      | BIT(CS21);     // 3.
-	TIMSK = BIT(OCIE0);    // 4.
-	TIMSK |= BIT(OCIE2);   // 4.
-	OCR0 = SERIAL_TOP;     // 4.
-	OCR2 = BUZZER_TOP;     // 4.
-#endif
 
 	SRXD_IEN   = 1;       // Arm start bit interrupt
 	buzzerOn = 1;
@@ -393,7 +388,7 @@ int main(void)
 		else {
 			if (!ALARM_ON && upTime > 0 && testTimer == 0) {
 				buzzerOn = 0;
-				RELAY_PIN = 0;
+				relayOn = 0;
 			}
 			btnPressed = 0;
 		}
@@ -425,9 +420,9 @@ int main(void)
 		}
 		if (btnPressed == 200) {
 			if (ALARM_ON)
-				RELAY_PIN = 0; // Turn relay / horn off
+				relayOn = 0; // Turn relay / horn off
 			else
-				RELAY_PIN = 1; // Test relay / horn
+				relayOn = 1; // Test relay / horn
 		}
 
 		if (actTimer < 100)
@@ -435,7 +430,7 @@ int main(void)
 		if (actTimer > 5 && aisState == 0)
 			ACT_PIN = 1;                 // Activity light OFF
 
-		if (testTimer > 0) {
+		if (testTimer > 0 && !ALARM_ON) {
 			if (testTimer < 200)
 				testTimer++;
 			if (testTimer == 5 || testTimer == 55 || testTimer == 105)
@@ -452,7 +447,10 @@ int main(void)
 			}
 		}
 
-
+		if  (relayOn && (PULSE_PIN == 1 || hornPattern()))
+			RELAY_PIN = 1;
+		else
+			RELAY_PIN = 0;
 		
 		hsecCnt++;
 		if (hsecCnt >= 50)
