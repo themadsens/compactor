@@ -252,12 +252,12 @@ AVRX_SIGINT(TIMER1_COMPA_vect)
 //
 // OUT
 //
-static char      StdBufOut[150];
+static char      StdBufOut[100];
 static pBigFifo pStdBufOut = (pBigFifo) StdBufOut;
-static char      NmeaHiOut[400];
-static pBigFifo pNmeaHiOut = (pBigFifo) NmeaHiOut;
+static char      NmeaHiOut[300];
+pBigFifo pNmeaHiOut = (pBigFifo) NmeaHiOut;
 static char      NmeaLoOut[500];
-static pBigFifo pNmeaLoOut = (pBigFifo) NmeaLoOut;
+pBigFifo pNmeaLoOut = (pBigFifo) NmeaLoOut;
 
 // Hispeed TX ready
 AVRX_SIGINT(USART_TXC_vect)
