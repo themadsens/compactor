@@ -1,10 +1,10 @@
 # 
-# ( EEPROMC) Copyright 2012 flemming.madsen at madsensoft.dk.
-# A EEPROMdapted for OBJDIR output etc
-#   EEPROM
-# W EEPROMinAVR Sample makefile written by Eric B. Weddington, Jörg Wunsch, et al.
-# R EEPROMeleased to the Public Domain
-# P EEPROMlease read the make user manual!
+# (C) Copyright 2012 flemming.madsen at madsensoft.dk.
+# Adapted for OBJDIR output etc
+#  
+# WinAVR Sample makefile written by Eric B. Weddington, Jörg Wunsch, et al.
+# Released to the Public Domain
+# Please read the make user manual!
 #
 # Additional material for this makefile was submitted by:
 #  Tim Henigan
@@ -395,9 +395,9 @@ extcoff: $(TARGET).elf
 $(OBJDIR)/%.o : %.c
 	@echo
 	@echo $(MSG_COMPILING) $<
-	#@$(CC) -c $(CPP_CFLAGS) -E $< -o $(@:.o=.cpp)
+	@#$(CC) -c $(CPP_CFLAGS) -E $< -o $(@:.o=.cpp)
 	$(CC) -c $(ALL_CFLAGS) $< -o $@
-	#@$(REMOVE) $(@:.o=.cpp)
+	@#$(REMOVE) $(@:.o=.cpp)
 
 
 # Compile: create assembler files from C source files.
@@ -409,9 +409,9 @@ $(OBJDIR)/%.s : %.c
 $(OBJDIR)/%.o : %.S
 	@echo
 	@echo $(MSG_ASSEMBLING) $<
-	#@$(CC) -c $(CPP_CFLAGS) -E $< -o $(@:.o=.cpp)
+	@#$(CC) -c $(CPP_CFLAGS) -E $< -o $(@:.o=.cpp)
 	$(CC) -c $(ALL_ASFLAGS) $< -o $@
-	#@$(REMOVE) $(@:.o=.cpp)
+	@#$(REMOVE) $(@:.o=.cpp)
 
 
 
@@ -455,7 +455,7 @@ clean_list :
 -include $(wildcard $(OBJDIR)/*.dep)
 
 tags:
-	ctags --languages=+Asm -R . ..\trigint\ ..\..\avrx\avrx
+	ctags --languages=+Asm -R . ../trigint/ ../../avrx/avrx
 
 
 # Listing of phony targets.

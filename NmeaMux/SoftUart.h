@@ -1,6 +1,9 @@
 /**
  * Soft UART in & out
  */
+#ifndef SOFTUART_H
+#define SOFTUART_H 1
+#include "BigFifo.h"
 
 #define CR 13
 #define LF 10
@@ -22,11 +25,13 @@ typedef struct NmeaBuf {
 	char    buf[];
 } __attribute__((__packed__)) NmeaBuf;
 
-extern uint16_t vhfChanged;
+pBigFifo pNmeaHiOut;
+pBigFifo pNmeaLoOut;
 
 // Uart Out
 void NmeaPutFifo(uint8_t f, char *s);
 int dbg_putchar(char c, FILE *stream);
 
 void Task_SoftUartOut(void);
+#endif
 // vim: set sw=3 ts=3 noet nu:
