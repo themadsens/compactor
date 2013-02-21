@@ -36,12 +36,12 @@ FALSE	= 0
 # MCU name
 #MCU      = atmega8
 #MCU      = atmega16
-MCU      = atmega128
+MCU      = atmega32
 #MCU      = at90s8515
 
 # default hardware values in case they are not defined in the source
 
-CPUCLK	= 8000000L
+CPUCLK	= 16000000L
 BAUDRATE= 19200
 TICKRATE= 1000
 
@@ -178,13 +178,13 @@ LDFLAGS += $(PRINTF_LIB) $(SCANF_LIB) $(MATH_LIB)
 # Type: avrdude -c ?
 # to get a full listing.
 #
-AVRDUDE_PROGRAMMER = stk500
+AVRDUDE_PROGRAMMER = jtag1
 
 # com1 = serial port. Use lpt1 to connect to parallel port.
 #AVRDUDE_PORT = com4    # programmer connected to serial device
 #AVRDUDE_BAUD = 38400
-AVRDUDE_PORT = com1    # programmer connected to serial device
-AVRDUDE_BAUD = 115200
+AVRDUDE_PORT = com19   # programmer connected to serial device
+AVRDUDE_BAUD = 19200
 
 AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
 #AVRDUDE_WRITE_EEPROM = -U eeprom:w:$(TARGET).eep

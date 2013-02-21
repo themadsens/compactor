@@ -5,15 +5,18 @@
 
     31-May-2002 - Added check for mega128
 */
-#define CPUCLK 8000000L     // CPU xtal
+#define CPUCLK 16000000L     // CPU xtal
 #define TICKRATE 1000       // AvrX timer queue Tick rate
 #define BAUDRATE 19200L     // Debug monitor baudrate
 
 #define LED PORTB           // Change this per your hardware and jumper setup
 #define LEDDDR DDRB
 
-#define SWITCH PINA
-#define SWITCHP PORTA
+#define SWITCH PINC
+#define SWITCHP PORTC
+#define SWITCHPORT SWITCHP
+#define SWITCHPIN 0
+
 
 // Peripheral initialization
 
@@ -31,6 +34,10 @@
 #	define TMC8_CK256 (1<<CS02)
 #endif
 
-#define UBRR_INIT (CPUCLK/(16*BAUDRATE)-1)
+//#define UBRR_INIT (CPUCLK/(16*BAUDRATE)-1)
+#define BAUD BAUDRATE
+#define F_CPU CPUCLK
+#include <util/setbaud.h>
+#define UBRR_INIT UBRR_VALUE
 
 

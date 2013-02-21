@@ -18,7 +18,7 @@ AVRX_IAR_TASK(Monitor, 0, 20, 0);       // External Task: Debug Monitor
 AVRX_GCC_TASK(Monitor, 20, 0);          // External Task: Debug Monitor
 
 TimerControlBlock   timer1,             // Declare the control blocks needed for timers
-                    timer2;
+                    timer2,timer3;
 /*
  Timer 0 Overflow Interrupt Handler
 
@@ -58,7 +58,7 @@ AVRX_GCC_TASKDEF(task1, 8, 3)
     }
 }
 /*
- Task 2 cycles the light on/off over 4 seconds.  It uses a simplified
+ Task 2 cycles the light on/off over 2 seconds.  It uses a simplified
  form of the delay API
  */
 AVRX_IAR_TASKDEF(task2, 0, 6, 2)
@@ -66,9 +66,25 @@ AVRX_GCC_TASKDEF(task2, 8, 2)
 {
     while (1)
     {
-        AvrXDelay(&timer2, 2000);           // 2 second delay
+        AvrXDelay(&timer2, 1000);           // 1 second delay
         LED = LED ^ 0x02;
 //        outp((inp(LED) ^ 0x02), LED);
+    }
+}
+/*
+ Task 3 toggles LED's quickly  while button is held
+ form of the delay API
+ */
+AVRX_IAR_TASKDEF(task3, 0, 6, 2)
+AVRX_GCC_TASKDEF(task3, 8, 2)
+{
+    while (1)
+    {
+        AvrXDelay(&timer3, 10);           // Check 100 times / sec
+        if (0 == (SWITCH & (1 << SWITCHPIN))) {
+            LED = LED ^ 0x03;
+            AvrXDelay(&timer3, 90);           // Toggle 10 times / sec
+        }
     }
 }
 
@@ -92,8 +108,11 @@ int main(void)                 // Main runs under the AvrX Stack
     LEDDDR = 0xFF;
     LED   = 0xFF;
 
+    SWITCHPORT |= (1<<SWITCHPIN);
+
     AvrXRunTask(TCB(task1));
     AvrXRunTask(TCB(task2));
+    AvrXRunTask(TCB(task3));
     AvrXRunTask(TCB(Monitor));
 
     InitSerialIO(UBRR_INIT);    // Initialize USART baud rate generator

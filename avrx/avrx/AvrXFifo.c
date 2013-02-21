@@ -19,6 +19,27 @@ typedef uint8_t BOOL;
 // and before the test. But this is not a race that will cause
 // fifo corruption.
 
+int16_t AvrXPutFifoStr(pAvrXFifo p, uint8_t *c, uint8_t sz)
+{
+  if (p->in < p->out) {
+    if (sz >= p->out - p->in)
+      return FIFO_ERR;
+  }
+  else {
+    if (sz >= p->size - p->in - p->out)
+      return FIFO_ERR;
+  }
+  uint8_t t;
+  for (t = p->in; sz > 0; sz--, t++) {
+    if (t >= p->size)
+      t = 0;
+    p->buf[t] = *c++;
+  }
+	p->in = t;
+	AvrXSetSemaphore(&p->Producer);
+	return FIFO_OK;
+}
+
 int16_t AvrXPutFifo(pAvrXFifo p, uint8_t c)
 {
 	uint8_t t = p->in+1;
@@ -48,6 +69,12 @@ int16_t AvrXPullFifo(pAvrXFifo p)
 void AvrXWaitPutFifo(pAvrXFifo p, uint8_t c)
 {
 	while (AvrXPutFifo(p, c) == FIFO_ERR)
+		AvrXWaitSemaphore(&p->Consumer);
+}
+
+void AvrXWaitPutFifoStr(pAvrXFifo p, uint8_t *c, uint8_t sz)
+{
+	while (AvrXPutFifoStr(p, c, sz) == FIFO_ERR)
 		AvrXWaitSemaphore(&p->Consumer);
 }
 
@@ -90,3 +117,4 @@ int16_t AvrXStatFifo(pAvrXFifo p)
 	return c;
 }
 
+// vim: set sw=2 ts=2 ai:

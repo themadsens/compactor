@@ -46,7 +46,8 @@ FALSE	= 0
 
 # MCU name
 
-MCU = at90s8515			# this is about as generic an AVR you can get.
+#MCU = at90s8515			# this is about as generic an AVR you can get.
+MCU = atmega16	
 
 # Output format. (can be srec, ihex, binary)
 

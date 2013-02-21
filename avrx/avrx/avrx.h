@@ -54,7 +54,7 @@ Revision History
 
 */
 #if !defined(BV)
-#  define BV(A) (1<<A)
+#  define BV(A) (1<<(A))
 #endif
 
 #ifdef __IAR_SYSTEMS_ICC__
@@ -98,6 +98,24 @@ Revision History
 
 #endif
 
+// Break the tie
+struct ProcessID;
+typedef struct ProcessID* Mutex;     /* A mutex is basically a pointer to a process */
+typedef struct ProcessID* *pMutex;     /* A mutex is basically a pointer to a process */
+
+/*
+    The timer queue manager is a service run in kernel mode and is tuned
+    to minimize interrupt latency while queueing, tracking and dequeuing
+    timers
+*/
+typedef struct TimerControlBlock
+{
+    struct TimerControlBlock *next;
+    Mutex semaphore;
+    unsigned short count;
+}
+* pTimerControlBlock, TimerControlBlock;
+
 /*
     void * AvrXSetKernelStack(char *newstack)
 
@@ -116,6 +134,9 @@ typedef struct ProcessID
 #ifdef SINGLESTEPSUPPORT
     unsigned char *bp1;
     unsigned char *bp2;
+#endif
+#ifdef AVRX_USER_PROCESS_DATA
+    AVRX_USER_PROCESS_DATA;
 #endif
 }
 * pProcessID, ProcessID;
@@ -147,7 +168,6 @@ struct AvrXKernelData
  SEM_DONE         // Semaphore has been triggered.
                   // Any other value is the address of a processID
 */
-typedef pProcessID Mutex, *pMutex;     /* A mutex is basically a pointer to a process */
 
 #define AVRX_MUTEX(A)\
         Mutex A
@@ -196,18 +216,6 @@ INTERFACE void AvrXIntSendMessage(pMessageQueue, pMessageControlBlock);
 INTERFACE void AvrXAckMessage(pMessageControlBlock);
 INTERFACE void AvrXWaitMessageAck(pMessageControlBlock);
 INTERFACE Mutex AvrXTestMessageAck(pMessageControlBlock);
-/*
-    The timer queue manager is a service run in kernel mode and is tuned
-    to minimize interrupt latency while queueing, tracking and dequeuing
-    timers
-*/
-typedef struct TimerControlBlock
-{
-    struct TimerControlBlock *next;
-    Mutex semaphore;
-    unsigned short count;
-}
-* pTimerControlBlock, TimerControlBlock;
 /*
     A special version of timers that send messages rather than firing
     a semaphore.

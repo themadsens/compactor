@@ -339,6 +339,12 @@ SEMAPHORE BIT DEFINITIONS
 snore:
 #ifdef  DEBUG
         cbi     DEBUG, IDLELED
+#else
+        _EXTERN(BeginIdleHook)
+        call BeginIdleHook /* For the MultiMon ONLY !!. Else delete these lines */
+#endif  /* DEBUG */
+#if 0
+        cbi     24, 5 /*PORTB,5*/
 #endif  /* DEBUG */
         ENDM
 

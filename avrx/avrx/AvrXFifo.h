@@ -41,8 +41,10 @@ static const uint8_t Name##FifoSz = Size;
 	static const pAvrXFifo Name = (pAvrXFifo)Name##Fifo
 
 int16_t AvrXPutFifo(pAvrXFifo, uint8_t);
+int16_t AvrXPutFifoStr(pAvrXFifo p, uint8_t *c, uint8_t sz);
 int16_t AvrXPullFifo(pAvrXFifo);
 void AvrXWaitPutFifo(pAvrXFifo, uint8_t);
+void AvrXWaitPutFifoStr(pAvrXFifo p, uint8_t *c, uint8_t sz);
 int16_t AvrXWaitPullFifo(pAvrXFifo);
 int16_t AvrXPeekFifo(pAvrXFifo);
 int16_t AvrXStatFifo(pAvrXFifo);
