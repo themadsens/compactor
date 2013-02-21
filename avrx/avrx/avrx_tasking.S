@@ -319,10 +319,11 @@ _IdleTask:
 ;	out	SPL, Yl
 ;	out	SPL, Yh		; Reset kernel stack
         BeginIdle               ; Any interrupt will EndIdle
+_IdleLoop:
         EndCritical             ; Enable interrupts
         sleep                   ; Power Down..
         EndIdle
-        rjmp    _IdleTask
+        rjmp    _IdleLoop
         _ENDFUNC
 
 /*+

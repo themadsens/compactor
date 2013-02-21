@@ -90,7 +90,9 @@ any C code.
 #if defined(UDR0)
 #	define UDR UDR0
 #endif
-#if defined(UBRR0L)
+#if defined(UBRRL)
+#	define UBRR UBRRL
+#elif defined(UBRR0L)
 #	define UBRR UBRR0L
 #endif
 #if defined(SIG_UART0_RECV)
