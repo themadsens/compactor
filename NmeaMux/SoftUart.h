@@ -32,6 +32,8 @@ pBigFifo pNmeaLoOut;
 void NmeaPutFifo(uint8_t f, char *s);
 int dbg_putchar(char c, FILE *stream);
 
+void SoftUartInInit(void);
+void SoftUartOutInit(void);
 void Task_SoftUartOut(void);
 #endif
 // vim: set sw=3 ts=3 noet nu:

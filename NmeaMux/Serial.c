@@ -121,7 +121,7 @@ static uint8_t xmitDecide(uint16_t type, uint8_t  where)
 	if (0 == type)
 		return 1;
 
-	register uint16_t bufFree = BigFifoFree(pNmeaLoOut);
+	register uint16_t bufFree = BigStatFifo(pNmeaLoOut);
 	for (i = 0; i < NUM_SEEN; i++) {
 		register NmeaDef *m = msgSeen+i;
 		if (type == m->type) {
@@ -156,8 +156,6 @@ void Task_Serial(void)
 		
 		AvrXStartTimerMessage(&tmb, 5000, &SerialQ);
 		msg = (NmeaBuf *) AvrXWaitMessage(&SerialQ);
-		if (msg == (NmeaBuf *) &tmb)
-			continue;
 
 		BeginCritical();
 		register int16_t curTime = msTick;
@@ -170,19 +168,23 @@ void Task_Serial(void)
 			xmitDecide(0, 0); // Update timestamps
 			continue;
 		}
+		msgType = NMEATYPE(msg->buf[4], msg->buf[5], msg->buf[6]);
 
 		if (HI_ONLY_PORT == msg->id) {
 			xmitDecide(0, 0); // Update timestamps
+			if (0 == gpsLast && IS_GPSTYPE(msgType)) {
+				goto gps;
+	      }
 			NmeaPutFifo(1, msg->buf+1);
-			continue;
+			goto next;
 		}
 
-		msgType = NMEATYPE(msg->buf[4], msg->buf[5], msg->buf[6]);
 		if (GPS_TRIG == msgType) {
 			if (!gpsLast || curTime - gpsLast > 5000)
 				gpsPort = msg->id;
 			gpsLast = curTime ?: 1;
 		}
+gps:
 		if (IS_GPSTYPE(msgType)) {
 			if (!gpsLast || curTime - gpsLast > 5000)
 				gpsLast = 0;
@@ -190,12 +192,13 @@ void Task_Serial(void)
 				NmeaPutFifo(0, msg->buf+1);
 				NmeaPutFifo(1, msg->buf+1);
 			}
-			continue;
+			goto next;
 		}
 		if (xmitDecide(msgType, msg->id))
 			NmeaPutFifo(0, msg->buf+1);
 		NmeaPutFifo(1, msg->buf+1);
 
+next:
 		// Move residual accumulated data thus far to front - Ie. Give buffer free
 		BeginCritical();
 		memmove(msg->buf, msg->buf + msg->off, msg->ix);
