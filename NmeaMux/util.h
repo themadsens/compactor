@@ -49,23 +49,11 @@ inline i16 muldiv(i16 a, i16 b, i16 c) {
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 
-struct TimerEnt;
-typedef void (*TimerHandler) (struct TimerEnt *ent, void *inst);
-struct TimerEnt 
-{
-	struct TimerEnt *next;
-	uint16_t count;
-	TimerHandler handler;
-	void *instanceP;
-};
-void ClrTimer(struct TimerEnt *ent, uint8_t isInt);
-void AddTimer(struct TimerEnt *ent, uint16_t count,
-				  TimerHandler handler, void *instanceP, uint8_t isInt);
 
 extern int16_t msTick;
 extern uint16_t secTick;
 extern uint16_t hdayTick;
 void delay_ms(int x);
 struct TimerControlBlock;
-struct TimerControlBlock *processTimer(void);
+struct TimerControlBlock *myTimer(void);
 #endif

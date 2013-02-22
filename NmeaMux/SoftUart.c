@@ -9,6 +9,8 @@
  */
 
 #include <avr/io.h>
+#include <avr/interrupt.h>
+#include <avr/pgmspace.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <avrx.h>
@@ -18,21 +20,16 @@
 #include "Serial.h"
 #include "hardware.h"
 #include "util.h"
-//
-// IN
-//
 
-struct TimerEnt actTimer;
-void actOff(struct TimerEnt *ent, void *inst)
-{
-	BSET(LED_PORT, LED_ACT);
-}
+static Mutex suOut;
+
+int16_t actTimer;
 static void bufPut(char *s, uint8_t c)
 {
 	register struct NmeaBuf *b = (struct NmeaBuf *) s;
 	if (0 == b->ix && c != LF)
 		return;
-	if (1 == b->ix && c != '$')  {
+	if (1 == b->ix && c != '$' && c != '!')  {
 		b->ix = 0;
 		return;
 	}
@@ -41,17 +38,42 @@ static void bufPut(char *s, uint8_t c)
 		return;
 	}
 
-	b->buf[b->off + b->ix++] = c;
 	if (CR == c) {
 		b->buf[b->ix++] = 0;
 		b->off = b->ix;
 		b->ix = 0;
 		AvrXIntSendMessage(&SerialQ, (pMessageControlBlock) s);
 		BCLR(LED_PORT, LED_ACT);
-		ClrTimer(&actTimer, 1);
-		AddTimer(&actTimer, 50, actOff, 0, 1);
+		actTimer = msTick ?: 1;
 	}
+	else
+		b->buf[b->off + b->ix++] = c;
 }
+
+int16_t ovfTimer;
+void NmeaPutFifo(uint8_t f, char *s)
+{
+	register pBigFifo pf = 0==f ? pNmeaLoOut : pNmeaHiOut;
+	register char *e;
+
+	for (e = s; *e; e++)
+		;
+	e[0] = CR;
+	e[1] = LF;
+	BeginCritical();
+	if (FIFO_ERR == BigPutFifoStr(pf, (uint8_t *) s, e - s + 2)) {
+		puts("FIFO_ERR");
+		BCLR(LED_PORT, LED_OVF);
+		ovfTimer = msTick ?: 1;
+	}
+	EndCritical();
+	*e = '\0'; // Restore end of string
+	AvrXSetSemaphore(&suOut);
+}
+
+//
+// IN
+//
 
 static struct SoftUartState 
 {
@@ -62,35 +84,9 @@ static struct SoftUartState
 static uint8_t suEdgeTick[4];
 
 static struct SoftUartState stOut[3];
-static Mutex suOut;
 
 static char NmeaHiBuf[2][99];
 static char NmeaLoBuf[3][70];
-
-static void SoftUartInInit(void)
-{
-	BSET(SUART1_RXPU, SUART1_RXPIN);
-	BSET(SUART2_RXPU, SUART2_RXPIN);
-	BSET(SUART3_RXPU, SUART3_RXPIN);
-	BSET(SUARTHI_RXPU, SUARTHI_RXPIN);
-
-	NmeaHiBuf[0][2] = 1; NmeaHiBuf[0][3] = sizeof(NmeaHiBuf[0])-sizeof(NmeaBuf);
-	NmeaHiBuf[1][2] = 2; NmeaHiBuf[1][3] = sizeof(NmeaHiBuf[1])-sizeof(NmeaBuf);
-	NmeaLoBuf[0][2] = 3; NmeaLoBuf[0][3] = sizeof(NmeaLoBuf[0])-sizeof(NmeaBuf);
-	NmeaLoBuf[1][2] = 4; NmeaLoBuf[1][3] = sizeof(NmeaLoBuf[1])-sizeof(NmeaBuf);
-	NmeaLoBuf[2][2] = 5; NmeaLoBuf[2][3] = sizeof(NmeaLoBuf[2])-sizeof(NmeaBuf);
-	stIn[0].buf = NmeaLoBuf[0];
-	stIn[1].buf = NmeaLoBuf[1];
-	stIn[2].buf = NmeaLoBuf[2];
-	stIn[3].buf = NmeaHiBuf[1];
-
-#if 1
-	// Extern Ints 0,1,2
-	MCUCR |= BV(ISC11)|BV(ISC01);
-	//BCLR(MCUCSR, ISC2);
-	GICR |= BV(INT0)|BV(INT1)|BV(INT2);
-#endif
-}
 
 // Hispeed RX ready
 AVRX_SIGINT(USART_RXC_vect)
@@ -103,10 +99,7 @@ AVRX_SIGINT(USART_RXC_vect)
 	Epilog();
 }
 
-uint16_t vhfChanged;
-uint8_t vhfLast;
-
-static void inline suartDo(struct SoftUartState *stIn, uint8_t pin)
+static inline void suartDo(struct SoftUartState *stIn, uint8_t pin)
 {
 	stIn->state--;
 	switch (stIn->state) {
@@ -138,13 +131,21 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 	if (++suTick >= SUART_MULFREQ) {
 		suTick = 0;
 
+		if (actTimer && msTick - actTimer > 50) {
+			BSET(LED_PORT, LED_ACT);
+			actTimer = 0;
+		}
+		if (ovfTimer && msTick - ovfTimer > 50) {
+			BSET(LED_PORT, LED_OVF);
+			ovfTimer = 0;
+		}
 	}
 	
 	register uint8_t pin;
 	register uint8_t i = suTick;
 
 	if (i > 0 && i < 3 && stOut[i].state) {
-		// Drive the output
+		// Drive the output for 1&2, 0 is on the UART Tx
 
 		stOut[i].state--;
 		switch (stOut[i].state) {
@@ -221,10 +222,13 @@ AVRX_SIGINT(INT1_vect)
 }
 
 // Start a byte for the Hi-speed semi-soft uart on timer1
-#define ISR_LEAD 1
-AVRX_SIGINT(INT2_vect)
+// Add this to all stacks!! We trade this to save the ~100
+// cycle prolog
+#define ISR_LEAD 110
+//AVRX_SIGINT(INT2_vect)
+ISR(INT2_vect)
 {
-   IntProlog();                // Switch to kernel stack/context
+   //IntProlog();                // Switch to kernel stack/context
 	BSET(LED_PORT, LED_DBG);
 
 	// Scan again in 0.5 bit time. Scan in middle of bit
@@ -235,16 +239,19 @@ AVRX_SIGINT(INT2_vect)
 	stIn[3].state = 10;
 	BCLR(GICR, INT2);
 
-   Epilog();                   // Return to tasks
+   //Epilog();                   // Return to tasks
 }
+static uint16_t tVal;
 AVRX_SIGINT(TIMER1_COMPA_vect)
 {
    IntProlog();                // Switch to kernel stack/context
 	BSET(LED_PORT, LED_DBG);
-	suartDo(&stIn[3], SBIT(SUARTHI_RXPORT, SUARTHI_RXPIN));
+	tVal = TCNT1;
+	register uint8_t pin = SBIT(SUARTHI_RXPORT, SUARTHI_RXPIN);
+	suartDo(&stIn[3], pin);
 	if (0 == stIn[3].state) {
 		BSET(GICR, INT2);
-		TCNT1 = 0;
+		BCLR(TCCR1B, CS10);
 	}
    Epilog();                   // Return to tasks
 }
@@ -252,7 +259,7 @@ AVRX_SIGINT(TIMER1_COMPA_vect)
 //
 // OUT
 //
-static char      StdBufOut[100];
+static char      StdBufOut[150];
 static pBigFifo pStdBufOut = (pBigFifo) StdBufOut;
 static char      NmeaHiOut[300];
 pBigFifo pNmeaHiOut = (pBigFifo) NmeaHiOut;
@@ -277,65 +284,23 @@ AVRX_SIGINT(USART_TXC_vect)
 
 int dbg_putchar(char c, FILE *stream)
 {
-	if (FIFO_ERR != BigPutFifo(pStdBufOut, c))
+	BeginCritical();
+	//if (FIFO_ERR != BigPutFifo(pStdBufOut, c))
+	if (FIFO_ERR != BigPutFifo(pNmeaHiOut, c))
 		AvrXSetSemaphore(&suOut);
+	EndCritical();
 	return 0;
-}
-
-struct TimerEnt ovfTimer;
-void ovfOff(struct TimerEnt *ent, void *inst)
-{
-	BSET(LED_PORT, LED_OVF);
-}
-void NmeaPutFifo(uint8_t f, char *s)
-{
-	register pBigFifo pf = 0==f ? pNmeaLoOut : pNmeaHiOut;
-	register char *e;
-
-	for (e = s; *e; e++)
-		;
-	*e++ = CR;
-	*e++ = LF;
-	if (FIFO_ERR == BigPutFifoStr(pf, (uint8_t *) s, e - s)) {
-		puts("FIFO_ERR");
-		BCLR(LED_PORT, LED_OVF);
-		ClrTimer(&ovfTimer, 0);
-		AddTimer(&ovfTimer, 50, ovfOff, 0, 0);
-	}
-	AvrXSetSemaphore(&suOut);
 }
 
 void Task_SoftUartOut(void)
 {
-   // Timer2 4800 baud soft uart timer
-   OCR2 = TCNT2_TOP;
-   BSET(TIMSK, OCIE2);
-   TCCR2 = BV(CS21)|BV(WGM21); // F_CPU/8 - CTC Mode
-
-   SoftUartInInit();
-
-	BSET(TCCR1B, WGM12);
-	OCR1A = SERIAL_TOP;
-
-	BSET(SUART1_TXDDR, SUART1_TXPIN);
-	BSET(SUART2_TXDDR, SUART2_TXPIN);
-
-	stOut[0].buf = NmeaHiOut;
-	BigFlushFifo(pNmeaHiOut);
-	pNmeaHiOut->size = (uint8_t)(sizeof(NmeaHiOut) - sizeof(BigFifo) + 1);
-
-	stOut[1].buf = NmeaLoOut;
-	BigFlushFifo(pNmeaLoOut);
-	pNmeaLoOut->size = (uint8_t)sizeof(NmeaLoOut) - sizeof(BigFifo) + 1;
-
-	stOut[2].buf = StdBufOut;
-	BigFlushFifo(pStdBufOut);
-	pStdBufOut->size = (uint8_t)(sizeof(StdBufOut) - sizeof(BigFifo) + 1);
 
 	register uint8_t i;
 	for (;;) {
 		AvrXWaitSemaphore(&suOut);
+
 		for (i = 0; i < 3; i++) {
+			BeginCritical();
 			if (0 == stOut[i].state &&
 				 FIFO_ERR != BigPeekFifo((pBigFifo) stOut[i].buf))
 			{
@@ -351,7 +316,66 @@ void Task_SoftUartOut(void)
 					}
 				}
 			}
+			EndCritical();
 		}
 	}
 }
+
+void SoftUartInInit(void)
+{
+	BSET(SUART1_RXPU, SUART1_RXPIN);
+	BSET(SUART2_RXPU, SUART2_RXPIN);
+	BSET(SUART3_RXPU, SUART3_RXPIN);
+	BSET(SUARTHI_RXPU, SUARTHI_RXPIN);
+
+	NmeaHiBuf[0][2] = 1; NmeaHiBuf[0][3] = sizeof(NmeaHiBuf[0])-sizeof(NmeaBuf);
+	NmeaHiBuf[1][2] = 2; NmeaHiBuf[1][3] = sizeof(NmeaHiBuf[1])-sizeof(NmeaBuf);
+	NmeaLoBuf[0][2] = 3; NmeaLoBuf[0][3] = sizeof(NmeaLoBuf[0])-sizeof(NmeaBuf);
+	NmeaLoBuf[1][2] = 4; NmeaLoBuf[1][3] = sizeof(NmeaLoBuf[1])-sizeof(NmeaBuf);
+	NmeaLoBuf[2][2] = 5; NmeaLoBuf[2][3] = sizeof(NmeaLoBuf[2])-sizeof(NmeaBuf);
+	stIn[0].buf = NmeaLoBuf[0];
+	stIn[1].buf = NmeaLoBuf[1];
+	stIn[2].buf = NmeaLoBuf[2];
+	stIn[3].buf = NmeaHiBuf[1];
+
+#if 1
+	// Extern Ints 0,1,2
+	MCUCR |= BV(ISC11)|BV(ISC01);
+	//BCLR(MCUCSR, ISC2);
+	GICR |= BV(INT0)|BV(INT1)|BV(INT2);
+
+	OCR1A = SERIAL_TOP;
+	BSET(TCCR1B, WGM12);
+	BSET(TIMSK, OCIE1A);
+#endif
+}
+
+void SoftUartOutInit(void) 
+{
+	stOut[0].buf = NmeaHiOut;
+	BigFlushFifo(pNmeaHiOut);
+	pNmeaHiOut->size = (uint16_t)(sizeof(NmeaHiOut) - sizeof(BigFifo) + 1);
+
+	stOut[1].buf = NmeaLoOut;
+	BigFlushFifo(pNmeaLoOut);
+	pNmeaLoOut->size = (uint16_t)sizeof(NmeaLoOut) - sizeof(BigFifo) + 1;
+
+	stOut[2].buf = StdBufOut;
+	BigFlushFifo(pStdBufOut);
+	pStdBufOut->size = (uint16_t)(sizeof(StdBufOut) - sizeof(BigFifo) + 1);
+
+   OCR2 = TCNT2_TOP;
+   BSET(TIMSK, OCIE2);
+   TCCR2 = BV(CS21)|BV(WGM21); // F_CPU/8 - CTC Mode
+
+   UCSRB = BV(TXEN)|BV(RXEN)|BV(RXCIE); //Enable Tx/Rx in UART + IEN
+
+   // Timer2 4800 baud soft uart timer
+
+	BSET(SUART1_TXPORT, SUART1_TXPIN);
+	BSET(SUART2_TXPORT, SUART2_TXPIN);
+	BSET(SUART1_TXDDR, SUART1_TXPIN);
+	BSET(SUART2_TXDDR, SUART2_TXPIN);
+}
+//
 // vim: set sw=3 ts=3 noet nu:

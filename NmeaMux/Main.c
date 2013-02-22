@@ -57,106 +57,28 @@ AVRX_SIGINT(TIMER0_COMP_vect)
    Epilog();                   // Return to tasks
 }
 
-struct TimerEnt *TimerQ;
-
-MessageQueue TimerWQ;
-static pMessageControlBlock msg;
-static TimerMessageBlock dly;
-static void *intr;
-uint16_t curTimerStart;
-
-static uint16_t waited;
-
-void Task_Timer(void)
+void Task_Debug(void)
 {
+	delay_ms(100);
+	DEBUG("--> RUN");
+	delay_ms(100);
+	NmeaPutFifo(0, "$GPTST,LO1");
+	delay_ms(100);
+	NmeaPutFifo(1, "$GPTST,HI1");
+	delay_ms(100);
+	NmeaPutFifo(0, "$GPTST,LO2");
+	delay_ms(100);
+	NmeaPutFifo(1, "$GPTST,HI2");
 	for (;;) {
-		BeginCritical();
-		if (TimerQ) {
-			curTimerStart = msTick;
-			AvrXStartTimerMessage(&dly, TimerQ->count, &TimerWQ);
-		}
-		curTimerStart = msTick;
-		EndCritical();
-		msg = AvrXWaitMessage(&TimerWQ);
-
-		BeginCritical();
-		waited = msTick - curTimerStart;
-		for (struct TimerEnt *cur = TimerQ; cur; cur = cur->next) {
-			if (cur->count > waited)
-				cur->count -= waited;
-			else
-				cur->count = 0;
-		}
-
-
-		if (msg == (pMessageControlBlock) &intr) {
-			AvrXCancelTimerMessage(&dly, &TimerWQ);
-			EndCritical();
-			continue;
-		}
-		if (TimerQ) {
-			TimerQ->handler(TimerQ, TimerQ->instanceP);
-			TimerQ = TimerQ->next;
-		}
-		EndCritical();
+		//DEBUG
+		delay_ms(500);
+		SBIT(LED_PORT, LED_OVF) ^= 1;
 	}
 }
-
-void AddTimer(struct TimerEnt *ent, uint16_t count,
-				  TimerHandler handler, void *instanceP, uint8_t isInt)
-{
-	ent->count = count;
-	ent->handler = handler;
-	ent->instanceP = instanceP;
-	ent->next = NULL;
-	BeginCritical();
-	if (!TimerQ) {
-		TimerQ = ent;
-	}
-	else {
-		struct TimerEnt *prev = NULL;
-		for (struct TimerEnt *cur = TimerQ; cur; cur = cur->next) {
-			if (cur->count > ent->count) {
-				ent->next = cur;
-				if (cur == TimerQ)
-					TimerQ = ent;
-				else
-					prev->next = ent;
-				break;
-			}
-			prev = cur;
-		}
-	}
-	EndCritical();
-
-	if (isInt)
-		AvrXIntSendMessage(&TimerWQ, (pMessageControlBlock)&intr);
-	else
-		AvrXSendMessage(&TimerWQ, (pMessageControlBlock)&intr);
-}
-
-void ClrTimer(struct TimerEnt *ent, uint8_t isInt)
-{
-	if (TimerQ == ent) {
-		TimerQ = ent->next;
-		if (isInt)
-			AvrXIntSendMessage(&TimerWQ, (pMessageControlBlock)&intr);
-		else
-			AvrXSendMessage(&TimerWQ, (pMessageControlBlock)&intr);
-		return;
-	}
-	for (struct TimerEnt *cur = TimerQ; cur; cur = cur->next) {
-		if (cur->next == ent) {
-			cur->next = ent->next;
-			return;
-		}
-	}
-}
-
 // Task declarations -- Falling priority order
-AVRX_GCC_TASK( Task_SoftUartOut,  20,  1);
-AVRX_GCC_TASK( Task_Serial,      100,  4);
-AVRX_GCC_TASK( Task_Timer,        20,  4);
+AVRX_GCC_TASK( Task_SoftUartOut, 60,  1);
+AVRX_GCC_TASK( Task_Serial,      60,  4);
+AVRX_GCC_TASK( Task_Debug,       20,  2);
 
 #define RUN(T) (AvrXRunTask(TCB(T)))
 
@@ -173,16 +95,20 @@ int main(void)
    BSET(TIMSK, OCIE0);
    TCCR0 = BV(CS00)|BV(CS01)|BV(WGM01); // F_CPU/64 - CTC Mode
 
+#if 1
    // USART Baud rate etc
    UBRRH = UBRRH_VALUE;
    UBRRL = UBRRL_VALUE;
 #if USE2X
    UCSRA |= BV(U2X);			       //Might double the UART Speed
 #endif
-   UCSRB = BV(RXEN)|BV(RXCIE);	 //Enable Rx in UART + IEN
    UCSRC = BV(UCSZ0)|BV(UCSZ1)|BV(URSEL);  //8-Bit Characters
+#endif
 
    stdout = &mystdout; //Required for printf init
+
+	SoftUartInInit();
+	SoftUartOutInit();
 
 	BSET(LED_PORT, LED_DBG);
 	BSET(LED_PORT, LED_ACT);
@@ -195,13 +121,10 @@ int main(void)
 	extern Mutex EEPromMutex;
 	AvrXSetSemaphore(&EEPromMutex);
 
-	msTick = 30000;
-
-	DEBUG("--> RUN");
 	// Start tasks
-   RUN(Task_Timer);
-   RUN(Task_Serial);
    RUN(Task_SoftUartOut);
+	RUN(Task_Serial);
+   RUN(Task_Debug);
 
    Epilog();                   //Fall into kernel & start first task
 
@@ -214,7 +137,7 @@ void delay_ms(int x)
 	AvrXDelay(&AvrXSelf()->processDelay, x);
 }
 
-TimerControlBlock *processTimer(void)
+TimerControlBlock *myTimer(void)
 {
 	return &AvrXSelf()->processDelay;
 }
