@@ -35,10 +35,13 @@
 TRUE	= 1
 FALSE	= 0
 
+AVRDUDE_PROGRAMMER = usbtiny
+AVRDUDE_PORT = usb     # programmer connected to serial device
+
 # MCU name
 #MCU      = atmega8
 #MCU      = atmega16
-MCU      = attiny24
+MCU      = attiny44
 #MCU      = at90s8515
 
 # default hardware values in case they are not defined in the source
@@ -181,12 +184,10 @@ LDFLAGS += $(PRINTF_LIB) $(SCANF_LIB) $(MATH_LIB)
 #
 #AVRDUDE_PROGRAMMER = dragon_jtag
 #AVRDUDE_PROGRAMMER = jtag1
-AVRDUDE_PROGRAMMER = usbtiny
 
 # com1 = serial port. Use lpt1 to connect to parallel port.
 #AVRDUDE_PORT = com19    # programmer connected to serial device
 #AVRDUDE_BAUD = 38400
-AVRDUDE_PORT = usb     # programmer connected to serial device
 #AVRDUDE_BAUD = -b 115200
 
 AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
@@ -200,7 +201,7 @@ AVRDUDE_ERASE_COUNTER = -y
 
 # Uncomment the following if you do /not/ wish a verification to be
 # performed after programming the device.
-AVRDUDE_NO_VERIFY = -V
+#AVRDUDE_NO_VERIFY = -V
 
 # Increase verbosity level.  Please use this when submitting bug
 # reports about avrdude. See <http://savannah.nongnu.org/projects/avrdude>
