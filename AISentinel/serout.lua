@@ -1,6 +1,6 @@
 local rs232 = require("luars232")
 
-local e, p = rs232.open("com4")
+local e, p = rs232.open("com2")
 if e ~= rs232.RS232_ERR_NOERROR then
 	-- handle error
 	out:write(string.format("can't open serial port '%s', error: '%s'\n",
@@ -32,6 +32,7 @@ while true do
     assert(err == rs232.RS232_ERR_NOERROR)
     err, data_read, size = p:read(1, 2)
     cnt = cnt + 1
+    -- [[
     if 100 == cnt then
         cnt = 0
         io.write("|")
@@ -44,5 +45,6 @@ while true do
         err, size = p:write(" !AIVDM,1,1,,B,1>M@sGgP020IWE6N8OiWSOwt1P00,0*02\r\n", 100) -- test Summertime
         assert(err == rs232.RS232_ERR_NOERROR)
     end
+    --]]
     io.write(string.format("%02d\b\b", cnt))
 end

@@ -403,12 +403,12 @@ int main(void)
 		if (ALARM_ON && btnPressed == 950) {   // Mark re/arm with a beep
 			buzzerOn = 1;
 			armTestPressed = 0;
-			alarmStart = 0;
 		}
-		if (!ALARM_ON && btnPressed == 1000) {
+		if (ALARM_ON && btnPressed == 1000) {
 			// 10 second press cancels / re-arms alarm
 			btnPressed = 0x8000; // Suspend button until released & pressed
 			buzzerOn = 0;
+			alarmStart = 0;
 		}
 
 		if (btnPressed == 50) {
