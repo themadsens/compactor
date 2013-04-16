@@ -68,7 +68,7 @@ SRC=$(wildcard *.c)
 #ASRC = ../avrx/serialio.S
 ASRC=$(wildcard *.S)
 
-GCCLIB = ../../avrx/avrx/avrx.a
+GCCLIB = ../avrx/avrx/avrx.a
 
 # Optimization level, can be [0, 1, 2, 3, s].
 # 0 = turn off optimization. s = optimize for size.
@@ -97,7 +97,7 @@ CSTANDARD = -std=gnu99
 CDEFS = -D$(PROJECT) -DF_CPU=$(CPUCLK) -DTICKRATE=$(TICKRATE) -DBAUDRATE=$(BAUDRATE)
 
 # Place -I options here
-CINCS = -I../../avrx/avrx
+CINCS = -I../avrx/avrx
 
 
 # Compiler flags.
@@ -450,7 +450,7 @@ clean_list :
 -include $(wildcard $(OBJDIR)/*.dep)
 
 tags:
-	ctags --languages=+Asm -R . ..\trigint\ ..\..\avrx\avrx
+	ctags --languages=+Asm -R . ..\trigint\ ..\avrx\avrx
 
 
 # Listing of phony targets.

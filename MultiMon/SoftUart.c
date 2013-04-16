@@ -98,8 +98,7 @@ AVRX_SIGINT(USART_RXC_vect)
 	Epilog();
 }
 
-uint16_t vhfChanged;
-uint8_t vhfLast;
+uint8_t vhfDisable;
 
 // Hi speed timer for soft uart in & out at 4800 baud
 uint8_t suTick;
@@ -110,17 +109,9 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 
 	DoBuzzer();
 
-	if (++suTick >= SUART_MULFREQ) {
+	if (++suTick >= SUART_MULFREQ)
 		suTick = 0;
 
-		if (SBIT(VHF_ON_RXPORT, VHF_ON_RXPIN) ^ vhfLast) {
-			vhfLast = SBIT(VHF_ON_RXPORT, VHF_ON_RXPIN);
-			vhfChanged = 0;
-		}
-		else if (vhfChanged < VHF_PAUSE)
-			vhfChanged++;
-	}
-	
 	register uint8_t pin;
 	register uint8_t i = suTick;
 	if (i < 3 && stOut[i].state) {
@@ -146,7 +137,7 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 			SBIT(SUART1_TXPORT, SUART1_TXPIN) = pin;
 		else if (1 == i)
 			SBIT(SUART2_TXPORT, SUART2_TXPIN) = pin;
-		else //if (vhfChanged >= VHF_PAUSE)
+		else if (!vhfDisable)
 			SBIT(VHF_PORT, VHF_UART) = pin;
 	}
 
@@ -262,7 +253,6 @@ void Task_SoftUartOut(void)
 
 	BSET(SUART1_TXDDR, SUART1_TXPIN);
 	BSET(SUART2_TXDDR, SUART2_TXPIN);
-	BSET(VHF_ON_RXPU, VHF_ON_RXPIN);
 	BSET(VHF_DDR, VHF_UART);
 
 	stOut[0].buf = NmeaFiOut;
