@@ -44,7 +44,7 @@ inline i16 muldiv(i16 a, i16 b, i16 c) {
 
 #define CRIT(x) do {BeginCritical(); x; EndCritical();} while(0)
 
-#define DEBUG(fmt, ...) printf_P(PSTR(fmt "\n"), ##__VA_ARGS__)
+#define DEBUG(fmt, ...) fprintf_P(stderr, PSTR(fmt "\n"), ##__VA_ARGS__)
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
@@ -53,6 +53,7 @@ inline i16 muldiv(i16 a, i16 b, i16 c) {
 extern int16_t msTick;
 extern uint16_t secTick;
 extern uint16_t hdayTick;
+extern int16_t msAge;
 void delay_ms(int x);
 struct TimerControlBlock;
 struct TimerControlBlock *myTimer(void);

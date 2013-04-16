@@ -3,7 +3,27 @@
  */
 #ifndef SOFTUART_H
 #define SOFTUART_H 1
-#include "BigFifo.h"
+#if 0
+#include <BigFifo.h>
+#define SysFifo BigFifo
+#define pSysFifo pBigFifo
+#define SysPeekFifo BigPeekFifo
+#define SysStatFifo BigStatFifo
+#define SysFlushFifo BigFlushFifo
+#define SysPullFifo BigPullFifo
+#define SysPutFifo BigPutFifo
+#define SysPutFifoStr BigPutFifoStr
+#else
+#include <AvrXFifo.h>
+#define SysFifo AvrXFifo
+#define pSysFifo pAvrXFifo
+#define SysPeekFifo AvrXPeekFifo
+#define SysStatFifo AvrXStatFifo
+#define SysFlushFifo AvrXFlushFifo
+#define SysPullFifo AvrXPullFifo
+#define SysPutFifo AvrXPutFifo
+#define SysPutFifoStr AvrXPutFifoStr
+#endif
 
 #define CR 13
 #define LF 10
@@ -25,12 +45,12 @@ typedef struct NmeaBuf {
 	char    buf[];
 } __attribute__((__packed__)) NmeaBuf;
 
-pBigFifo pNmeaHiOut;
-pBigFifo pNmeaLoOut;
+pSysFifo pNmeaHiOut;
+pSysFifo pNmeaLoOut;
 
 // Uart Out
 void NmeaPutFifo(uint8_t f, char *s);
-int dbg_putchar(char c, FILE *stream);
+int out_putchar(char c, FILE *stream);
 
 void SoftUartInInit(void);
 void SoftUartOutInit(void);
