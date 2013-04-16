@@ -33,7 +33,8 @@
 #define TICKRATE 1000       // AvrX timer queue 1ms resolution
 #define TCNT0_TOP (F_CPU/64/TICKRATE)
 
-static FILE mystdout = FDEV_SETUP_STREAM(dbg_putchar, NULL, _FDEV_SETUP_WRITE);
+static FILE mystderr = FDEV_SETUP_STREAM(out_putchar, NULL, _FDEV_SETUP_WRITE);
+static FILE mystdout = FDEV_SETUP_STREAM(out_putchar, NULL, _FDEV_SETUP_WRITE);
 
 int16_t msTick;
 int16_t msAge;
@@ -76,9 +77,9 @@ void Task_Debug(void)
 	}
 }
 // Task declarations -- Falling priority order
-AVRX_GCC_TASK( Task_SoftUartOut, 60,  1);
-AVRX_GCC_TASK( Task_Serial,      60,  4);
-AVRX_GCC_TASK( Task_Debug,       20,  2);
+AVRX_GCC_TASK( Task_SoftUartOut,120,  1);
+AVRX_GCC_TASK( Task_Serial,     120,  4);
+AVRX_GCC_TASK( Task_Debug,      120,  2);
 
 #define RUN(T) (AvrXRunTask(TCB(T)))
 
@@ -106,6 +107,7 @@ int main(void)
 #endif
 
    stdout = &mystdout; //Required for printf init
+   stderr = &mystderr; //Required for printf init
 
 	SoftUartInInit();
 	SoftUartOutInit();

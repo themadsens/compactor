@@ -121,7 +121,7 @@ static uint8_t xmitDecide(uint16_t type, uint8_t  where)
 	if (0 == type)
 		return 1;
 
-	register uint16_t bufFree = BigStatFifo(pNmeaLoOut);
+	register uint16_t bufFree = SysStatFifo(pNmeaLoOut);
 	for (i = 0; i < NUM_SEEN; i++) {
 		register NmeaDef *m = msgSeen+i;
 		if (type == m->type) {
@@ -166,6 +166,7 @@ void Task_Serial(void)
 			if (curTime - gpsLast > 5000)
 				gpsLast = 0;
 			xmitDecide(0, 0); // Update timestamps
+			DEBUG("TIMEOUT");
 			continue;
 		}
 		msgType = NMEATYPE(msg->buf[4], msg->buf[5], msg->buf[6]);
@@ -199,6 +200,7 @@ gps:
 		NmeaPutFifo(1, msg->buf+1);
 
 next:
+		DEBUG("RX:%d:%03d ON:%d 0:%03d %6.6s %d %d", secTick,msTick-msAge, msg->id, msg->buf[0], msg->buf+1, pNmeaHiOut->in, pNmeaHiOut->out);
 		// Move residual accumulated data thus far to front - Ie. Give buffer free
 		BeginCritical();
 		memmove(msg->buf, msg->buf + msg->off, msg->ix);

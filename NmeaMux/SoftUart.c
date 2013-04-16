@@ -15,18 +15,22 @@
 #include <stdlib.h>
 #include <avrx.h>
 #include <AvrXFifo.h>
-#include <BigFifo.h>
 #include "SoftUart.h"
 #include "Serial.h"
 #include "hardware.h"
 #include "util.h"
 
-static Mutex suOut;
+#define NUMIN 3
+#define NUMOUT 3
+
+MessageQueue qOut;
+static void *msgOut[NUMOUT];
 
 int16_t actTimer;
 static void bufPut(char *s, uint8_t c)
 {
 	register struct NmeaBuf *b = (struct NmeaBuf *) s;
+#if 1
 	if (0 == b->ix && c != LF)
 		return;
 	if (1 == b->ix && c != '$' && c != '!')  {
@@ -37,6 +41,7 @@ static void bufPut(char *s, uint8_t c)
 		b->ix = 0; //reset
 		return;
 	}
+#endif
 
 	if (CR == c) {
 		b->buf[b->ix++] = 0;
@@ -53,22 +58,21 @@ static void bufPut(char *s, uint8_t c)
 int16_t ovfTimer;
 void NmeaPutFifo(uint8_t f, char *s)
 {
-	register pBigFifo pf = 0==f ? pNmeaLoOut : pNmeaHiOut;
+	register pSysFifo pf = 0==f ? pNmeaLoOut : pNmeaHiOut;
 	register char *e;
 
 	for (e = s; *e; e++)
 		;
 	e[0] = CR;
 	e[1] = LF;
-	BeginCritical();
-	if (FIFO_ERR == BigPutFifoStr(pf, (uint8_t *) s, e - s + 2)) {
+	if (FIFO_ERR == SysPutFifoStr(pf, (uint8_t *) s, e - s + 2)) {
 		puts("FIFO_ERR");
 		BCLR(LED_PORT, LED_OVF);
 		ovfTimer = msTick ?: 1;
 	}
-	EndCritical();
 	*e = '\0'; // Restore end of string
-	AvrXSetSemaphore(&suOut);
+	// msgOut offset is index into stOut[]
+	AvrXSendMessage(&qOut, (pMessageControlBlock) msgOut + (0==f ? 1 : 0));
 }
 
 //
@@ -80,13 +84,13 @@ static struct SoftUartState
 	uint8_t state;
 	uint8_t ch;
 	char    *buf;
-} stIn[4];
+} stIn[NUMIN];
 static uint8_t suEdgeTick[4];
 
-static struct SoftUartState stOut[3];
+static struct SoftUartState stOut[NUMOUT];
 
-static char NmeaHiBuf[2][99];
-static char NmeaLoBuf[3][70];
+static char NmeaHiBuf[2][120];
+static char NmeaLoBuf[NUMIN][120];
 
 // Hispeed RX ready
 AVRX_SIGINT(USART_RXC_vect)
@@ -144,7 +148,7 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 	register uint8_t pin;
 	register uint8_t i = suTick;
 
-	if (i > 0 && i < 3 && stOut[i].state) {
+	if (i > 1 && i < NUMOUT && stOut[i].state) {
 		// Drive the output for 1&2, 0 is on the UART Tx
 
 		stOut[i].state--;
@@ -160,7 +164,7 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 
 		 case 0:
 			pin = 1;
-			AvrXIntSetSemaphore(&suOut);
+			AvrXSendMessage(&qOut, (pMessageControlBlock) msgOut + i);
 			break;
 		}
 		if (1 == i)
@@ -170,7 +174,7 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 	}
 
 	// Drive the three soft uarts
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < NUMIN; i++) {
 		if (stIn[i].state && suTick == suEdgeTick[i]) {
 
 			// The actual Soft UART
@@ -180,21 +184,11 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 			 case 1: pin = SBIT(SUART2_RXPORT, SUART2_RXPIN); break;
 			 case 2: pin = SBIT(SUART3_RXPORT, SUART3_RXPIN); break;
 			}
-			if (stIn[i].state == 99 && 0 == pin) {
-				// SUART3 has no interrupt -> polled
-				stIn[2].state = 10;
-				suEdgeTick[2] = (suTick+SUART_MULFREQ/2)%SUART_MULFREQ;
-				continue;
-			}
-
 			suartDo(&stIn[i], pin);
 
 			if (0 == stIn[i].state) {
 				// Re-enable edge trigger INT
-				if (i == 2)
-					stIn[i].state = 99;
-				else
-					BSET(GICR, 0==i ? INT0 : INT1);
+				BSET(GICR, 0==i ? INT0 : 1==i ? INT1 : INT2);
 			}
 		}
 	}
@@ -202,79 +196,48 @@ AVRX_SIGINT(TIMER2_COMP_vect)
 }
 
 // Start a byte for the Lo-speed uart
-AVRX_SIGINT(INT0_vect)
+ISR(INT0_vect)
 {
-   IntProlog();                // Switch to kernel stack/context
 	BSET(LED_PORT, LED_DBG);
 	suEdgeTick[0] = (suTick+SUART_MULFREQ/2)%SUART_MULFREQ;
 	stIn[0].state = 10;
 	BCLR(GICR, INT0);
-   Epilog();                   // Return to tasks
 }
-AVRX_SIGINT(INT1_vect)
+ISR(INT1_vect)
 {
-   IntProlog();                // Switch to kernel stack/context
 	BSET(LED_PORT, LED_DBG);
 	suEdgeTick[1] = (suTick+SUART_MULFREQ/2)%SUART_MULFREQ;
 	stIn[1].state = 10;
 	BCLR(GICR, INT1);
-   Epilog();                   // Return to tasks
 }
-
-// Start a byte for the Hi-speed semi-soft uart on timer1
-// Add this to all stacks!! We trade this to save the ~100
-// cycle prolog
-#define ISR_LEAD 110
-//AVRX_SIGINT(INT2_vect)
 ISR(INT2_vect)
 {
-   //IntProlog();                // Switch to kernel stack/context
 	BSET(LED_PORT, LED_DBG);
-
-	// Scan again in 0.5 bit time. Scan in middle of bit
-   TCNT1 = (SERIAL_TOP / 2) + ISR_LEAD;
-	// Start timer
-	BSET(TCCR1B, CS10);
-
-	stIn[3].state = 10;
+	suEdgeTick[2] = (suTick+SUART_MULFREQ/2)%SUART_MULFREQ;
+	stIn[2].state = 10;
 	BCLR(GICR, INT2);
-
-   //Epilog();                   // Return to tasks
-}
-static uint16_t tVal;
-AVRX_SIGINT(TIMER1_COMPA_vect)
-{
-   IntProlog();                // Switch to kernel stack/context
-	BSET(LED_PORT, LED_DBG);
-	tVal = TCNT1;
-	register uint8_t pin = SBIT(SUARTHI_RXPORT, SUARTHI_RXPIN);
-	suartDo(&stIn[3], pin);
-	if (0 == stIn[3].state) {
-		BSET(GICR, INT2);
-		BCLR(TCCR1B, CS10);
-	}
-   Epilog();                   // Return to tasks
 }
 
 //
 // OUT
 //
-static char      StdBufOut[150];
-static pBigFifo pStdBufOut = (pBigFifo) StdBufOut;
-static char      NmeaHiOut[300];
-pBigFifo pNmeaHiOut = (pBigFifo) NmeaHiOut;
-static char      NmeaLoOut[500];
-pBigFifo pNmeaLoOut = (pBigFifo) NmeaLoOut;
+static char      StdBufOut[100];
+static pSysFifo pStdBufOut = (pSysFifo) StdBufOut;
+static char      NmeaHiOut[200];
+pSysFifo pNmeaHiOut = (pSysFifo) NmeaHiOut;
+static char      NmeaLoOut[262];
+pSysFifo pNmeaLoOut = (pSysFifo) NmeaLoOut;
 
 // Hispeed TX ready
 AVRX_SIGINT(USART_TXC_vect)
 {
 	IntProlog();
 
-	int16_t ch = BigPullFifo(pNmeaHiOut);
+	int16_t ch = SysPullFifo(pNmeaHiOut);
 	if (FIFO_ERR == ch) {
 		BCLR(UCSRB, TXCIE);
 		stOut[0].state = 0;
+		AvrXIntSendMessage(&qOut, (pMessageControlBlock) msgOut + 0);
 	}
 	else
 		UDR = ch;
@@ -282,13 +245,12 @@ AVRX_SIGINT(USART_TXC_vect)
 	Epilog();
 }
 
-int dbg_putchar(char c, FILE *stream)
+int out_putchar(char c, FILE *stream)
 {
-	BeginCritical();
-	//if (FIFO_ERR != BigPutFifo(pStdBufOut, c))
-	if (FIFO_ERR != BigPutFifo(pNmeaHiOut, c))
-		AvrXSetSemaphore(&suOut);
-	EndCritical();
+	register uint8_t i = stream==stderr ? 0:2;
+	if (FIFO_ERR != SysPutFifo((pSysFifo) stOut[i].buf, c))
+		// msgOut offset is index into stOut[]
+		AvrXSendMessage(&qOut, (pMessageControlBlock) msgOut + i);
 	return 0;
 }
 
@@ -296,27 +258,25 @@ void Task_SoftUartOut(void)
 {
 
 	register uint8_t i;
+	register void **msg;
 	for (;;) {
-		AvrXWaitSemaphore(&suOut);
+		msg = (void **) AvrXWaitMessage(&qOut);
+		i = msg - msgOut;
 
-		for (i = 0; i < 3; i++) {
-			BeginCritical();
-			if (0 == stOut[i].state &&
-				 FIFO_ERR != BigPeekFifo((pBigFifo) stOut[i].buf))
-			{
-				stOut[i].state = 10;
-				if (i > 0)
-					// Lineup for a soft fifo
-					stOut[i].ch = BigPullFifo((pBigFifo) stOut[i].buf);
-				else {
-					// Use the HW fifo
-					if (SBIT(UCSRA, UDRE)) {
-						UDR = BigPullFifo(pNmeaHiOut);
-						BSET(UCSRB, TXCIE);                 //Enable TX empty Intr.
-					}
+		if (0 == stOut[i].state &&
+			 FIFO_ERR != SysPeekFifo((pSysFifo) stOut[i].buf))
+		{
+			stOut[i].state = 10;
+			if (i > 0)
+				// Lineup for a soft fifo
+				stOut[i].ch = SysPullFifo((pSysFifo) stOut[i].buf);
+			else {
+				// Use the HW fifo
+				if (SBIT(UCSRA, UDRE)) {
+					UDR = SysPullFifo(pNmeaHiOut);
+					BSET(UCSRB, TXCIE);                 //Enable TX empty Intr.
 				}
 			}
-			EndCritical();
 		}
 	}
 }
@@ -326,7 +286,6 @@ void SoftUartInInit(void)
 	BSET(SUART1_RXPU, SUART1_RXPIN);
 	BSET(SUART2_RXPU, SUART2_RXPIN);
 	BSET(SUART3_RXPU, SUART3_RXPIN);
-	BSET(SUARTHI_RXPU, SUARTHI_RXPIN);
 
 	NmeaHiBuf[0][2] = 1; NmeaHiBuf[0][3] = sizeof(NmeaHiBuf[0])-sizeof(NmeaBuf);
 	NmeaHiBuf[1][2] = 2; NmeaHiBuf[1][3] = sizeof(NmeaHiBuf[1])-sizeof(NmeaBuf);
@@ -336,33 +295,28 @@ void SoftUartInInit(void)
 	stIn[0].buf = NmeaLoBuf[0];
 	stIn[1].buf = NmeaLoBuf[1];
 	stIn[2].buf = NmeaLoBuf[2];
-	stIn[3].buf = NmeaHiBuf[1];
 
 #if 1
 	// Extern Ints 0,1,2
 	MCUCR |= BV(ISC11)|BV(ISC01);
 	//BCLR(MCUCSR, ISC2);
 	GICR |= BV(INT0)|BV(INT1)|BV(INT2);
-
-	OCR1A = SERIAL_TOP;
-	BSET(TCCR1B, WGM12);
-	BSET(TIMSK, OCIE1A);
 #endif
 }
 
 void SoftUartOutInit(void) 
 {
 	stOut[0].buf = NmeaHiOut;
-	BigFlushFifo(pNmeaHiOut);
-	pNmeaHiOut->size = (uint16_t)(sizeof(NmeaHiOut) - sizeof(BigFifo) + 1);
+	SysFlushFifo(pNmeaHiOut);
+	pNmeaHiOut->size = (uint16_t)(sizeof(NmeaHiOut) - sizeof(SysFifo) + 1);
 
 	stOut[1].buf = NmeaLoOut;
-	BigFlushFifo(pNmeaLoOut);
-	pNmeaLoOut->size = (uint16_t)sizeof(NmeaLoOut) - sizeof(BigFifo) + 1;
+	SysFlushFifo(pNmeaLoOut);
+	pNmeaLoOut->size = (uint16_t)sizeof(NmeaLoOut) - sizeof(SysFifo) + 1;
 
 	stOut[2].buf = StdBufOut;
-	BigFlushFifo(pStdBufOut);
-	pStdBufOut->size = (uint16_t)(sizeof(StdBufOut) - sizeof(BigFifo) + 1);
+	SysFlushFifo(pStdBufOut);
+	pStdBufOut->size = (uint16_t)(sizeof(StdBufOut) - sizeof(SysFifo) + 1);
 
    OCR2 = TCNT2_TOP;
    BSET(TIMSK, OCIE2);
