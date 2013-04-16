@@ -21,7 +21,7 @@ typedef struct NmeaBuf {
 	char    buf[];
 } __attribute__((__packed__)) NmeaBuf;
 
-extern uint16_t vhfChanged;
+extern uint8_t vhfDisable;
 
 // Uart Out
 void NmeaPutFifo(uint8_t f, char *s);

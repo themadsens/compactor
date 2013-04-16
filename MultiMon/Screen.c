@@ -37,11 +37,31 @@
 #include "util.h"
 #include "trigint_sin8.h"
 
+#define BTNTICK 5
+#define TIME_NOPRESS   (20000 / BTNTICK)
+#define TIME_LONGPRESS (2000 / BTNTICK)
+#define TIME_FASTUPD   (80 / BTNTICK)
+#define TIME_BTNSTABLE (10 / BTNTICK)
+
 #define LCD_ON() (BSET(LCDPOWER_PORT, LCDPOWER_PIN), delay_ms(50), InitLcd()) 
 #define LCD_OFF() BCLR(LCDPOWER_PORT, LCDPOWER_PIN)
 
 static uint8_t powerOff;
+static int16_t lastPress;
+uint8_t LED_ActivityMask;
 
+uint8_t curScreen;
+static uint8_t lastScreen;
+static struct BtnState {
+	unsigned char locked     ;//:1;
+	unsigned char editing    ;//:1;
+	unsigned char valEditing ;//:1;
+	unsigned char fieldNo    ;//:3;
+	unsigned char charNo     ;//:3;
+	unsigned char maxDigit   ;//:3;
+	unsigned char numDecimals;//:2;
+	unsigned short editNumber ;//:12;
+} bs;
 
 static void showAlarm(void);
 
@@ -406,7 +426,6 @@ static void ScreenRedrawGps(void)
 	}
 }
 
-uint8_t LED_ActivityMask;
 static void ScreenRedrawFast(void)
 {
 	if (SCREEN_CNFG == curScreen) {
@@ -424,13 +443,9 @@ static void ScreenRedrawFast(void)
 		}
 		LED_ActivityMask = 0;
 	}
-#if 0
-	LCDSetRect(2, 62, 4, 64, 1, powerOff ? RED : GREEN); 
-	LCDSetRect(2, 66, 4, 68, 1, 0 == vhfChanged ? BLUE : vhfChanged < VHF_PAUSE ? RED : GREEN);
-
-	sprintf_P(buf, PSTR("%5d"), vhfChanged);
-	LCDPutStr(buf, 2, 74, SMALL, FG, BG);
-#endif
+	uint8_t sep = (bs.locked && ! vhfDisable) ? 0 : muldiv(132, lastPress, TIME_NOPRESS);
+	LCDSetRect(2, 2, 4, sep, 1, vhfDisable ? GREEN : RED); 
+	LCDSetRect(2, sep, 4, 132, 1, BG); 
 }
 
 enum BTN {
@@ -438,10 +453,13 @@ enum BTN {
 	BTNPRESS_BOTH,
 	BTNPRESS_1UP,
 	BTNPRESS_2UP,
+	BTNPRESS_3UP,
 	BTNPRESS_1DOWN,
 	BTNPRESS_2DOWN,
+	BTNPRESS_3DOWN,
 	BTNPRESS_1LONG,
 	BTNPRESS_2LONG,
+	BTNPRESS_3LONG,
 };
 
 static void     *_ScreenUpd;
@@ -455,8 +473,7 @@ struct btnState {
 
 	unsigned pressed:8;
 	unsigned longPress:8;
-} btnState[2];
-static int16_t lastPress;
+} btnState[3];
 static int16_t lastFast;
 
 static int8_t btnSignal;
@@ -465,55 +482,68 @@ static int8_t btnSignal;
  */
 void Task_ScreenButton(void) 
 {
-	lastPress = msTick;
-	lastFast = msTick;
+	lastPress = 1;
+	lastFast = 0;
 	for (;;) {
-		delay_ms(5); 
-		if (abs(msTick - lastFast) > 80) {
-			lastFast = msTick;
+		delay_ms(BTNTICK); 
+		if (lastFast > TIME_FASTUPD) {
+			lastFast = 0;
 			AvrXSendMessage(&ScreenQueue, (pMessageControlBlock)&_ScreenUpdFast);
 		}
+		if (lastPress && lastPress < TIME_NOPRESS)
+			lastPress++;
+		if (lastFast < 30000)
+			lastFast++;
 
 		register uint8_t _btnSignal = 0;
-		for (register u8 i = 0; i < 2; i++) {
+		for (register u8 i = 0; i < 3; i++) {
 			struct btnState *s = btnState + i;
-			u8 btnDown = 0 == (BUTTON2_PORT&(BV(i ? BUTTON2_PIN : BUTTON1_PIN)));
+			if (s->lastTickCs < 30000)
+				s->lastTickCs++;
+
+			u8 btnDown = 0;
+			switch (i) {
+			 case 0: btnDown = 0 == (BUTTON1_PORT & BV(BUTTON1_PIN)); break;
+			 case 1: btnDown = 0 == (BUTTON2_PORT & BV(BUTTON2_PIN)); break;
+			 case 2: btnDown = 0 == (BUTTON3_PORT & BV(BUTTON3_PIN)); break;
+			}
 			if (btnDown != s->lastState) {
 				s->isChanging = 1;
-				s->lastTickCs = msTick;
+				s->lastTickCs = 0;
 				s->lastState = btnDown;
 			}
-			else if (s->isChanging && abs(msTick - s->lastTickCs) > 10) {
+			else if (s->isChanging && s->lastTickCs > TIME_BTNSTABLE) {
 				s->isChanging = 0;
 				if (s->lastState != s->pressed) {
 					s->pressed = s->lastState;
 					if (!s->pressed) {
 						if (!s->longPress && btnSignal != BTNPRESS_BOTH)
-							_btnSignal = i ? BTNPRESS_2UP : BTNPRESS_1UP;
+							_btnSignal = i + BTNPRESS_1UP;
 						s->longPress = 0;
 					}
 					else if (s->pressed) {
 						if (btnState[~i&1].pressed)
 							_btnSignal = BTNPRESS_BOTH;
 						else
-							_btnSignal = i ? BTNPRESS_2DOWN : BTNPRESS_1DOWN;
+							_btnSignal = i + BTNPRESS_1DOWN;
 					}
 				}
 			}
 			else if (s->pressed) {
-				if (abs(msTick - s->lastTickCs) >= 2000 && !s->longPress) {
+				if (s->lastTickCs >= TIME_LONGPRESS && !s->longPress) {
 					s->longPress = 1;
-					_btnSignal = i ? BTNPRESS_2LONG : BTNPRESS_1LONG;
+					_btnSignal = i + BTNPRESS_1LONG;
 				}
 			}
 		}
 		if (_btnSignal) {
-			lastPress = msTick;
+			lastPress = 1;
 			btnSignal = _btnSignal;
 			AvrXSendMessage(&ScreenQueue, (pMessageControlBlock)&_ScrnButtonTick);
 		}
-		else if (abs(msTick - lastPress) >= 25000 && BTN_NOPRESS != btnSignal) {
+		else if (lastPress >= TIME_NOPRESS && BTN_NOPRESS != btnSignal) {
 			// 20 Sec timeout
+			lastPress = 0;
 			btnSignal = BTN_NOPRESS;
 			AvrXSendMessage(&ScreenQueue, (pMessageControlBlock)&_ScrnButtonTick);
 		}
@@ -538,18 +568,6 @@ static inline void WriteEEPromWord(uint16_t *addr, uint16_t val)
 	AvrXWriteEEProm((uint8_t *)addr+1, (val>>8)&0xff);
 }
 
-uint8_t curScreen;
-static uint8_t lastScreen;
-struct BtnState {
-	unsigned char locked     ;//:1;
-	unsigned char editing    ;//:1;
-	unsigned char valEditing ;//:1;
-	unsigned char fieldNo    ;//:3;
-	unsigned char charNo     ;//:3;
-	unsigned char maxDigit   ;//:3;
-	unsigned char numDecimals;//:2;
-	unsigned short editNumber ;//:12;
-} bs;
 /**
  * Button handling
  */
@@ -573,12 +591,16 @@ static inline i8 ScreenButtonDo(void)
 			setAlarm_P(PSTR("Alarm Test %d"), 1);
 		}
 #endif
-		else if (!powerOff && !bs.locked) {
+		else if (!bs.locked) {
 			powerOff = 1;
 			bs.editing = 0;
 			bs.valEditing = 0;
 			LCD_OFF();
 		}
+		vhfDisable = 0;
+		break;
+	 case BTNPRESS_3UP:
+		vhfDisable = vhfDisable ? 0 : 1;
 		break;
 	 case BTNPRESS_1UP:
 		// Power-on, Browse screens, Rotate digit or Cancel
@@ -608,6 +630,7 @@ static inline i8 ScreenButtonDo(void)
 		curScreen = (curScreen ? curScreen : SCREEN_NUM) - 1;
 		return 1;
 	 case BTNPRESS_2UP:
+		vhfDisable = vhfDisable ? 0 : 1; //DEBUG
 		if (powerOff)
 			return 0;
 		// Select field or digit to edit.
@@ -780,6 +803,7 @@ void Task_Screen(void)
 	// Hardware init
 	BSET(BUTTON1_PU, BUTTON1_PIN);
 	BSET(BUTTON2_PU, BUTTON2_PIN);
+	BSET(BUTTON3_PU, BUTTON3_PIN);
 
 	BSET(LCDPOWER_DDR, LCDPOWER_PIN);
 	BSET(BUZZER_DDR, BUZZER_PIN);
