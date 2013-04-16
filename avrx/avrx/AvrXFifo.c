@@ -21,20 +21,16 @@ typedef uint8_t BOOL;
 
 int16_t AvrXPutFifoStr(pAvrXFifo p, uint8_t *c, uint8_t sz)
 {
-  if (p->in < p->out) {
-    if (sz >= p->out - p->in)
-      return FIFO_ERR;
-  }
-  else {
-    if (sz >= p->size - p->in - p->out)
-      return FIFO_ERR;
-  }
+  if (sz >= p->size - AvrXStatFifo(p))
+    return FIFO_ERR;
+
   uint8_t t;
   for (t = p->in; sz > 0; sz--, t++) {
     if (t >= p->size)
       t = 0;
     p->buf[t] = *c++;
   }
+	p->in = t;
 	p->in = t;
 	AvrXSetSemaphore(&p->Producer);
 	return FIFO_OK;
