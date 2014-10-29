@@ -1,0 +1,300 @@
+Note: the file arvx.inc provides definitions for much of the following.
+
+Control Blocks / Structures:
+  TimerControlBlock:
+    This is a six byte structure consisting of:
+      *next - pointer to the next element in the TCB queue
+      semaphore - task(s) owning this TCB (?)
+      count - 16 bit number of timer ticks
+      
+  TimerMessageBlock
+    Similar to the TCB, the TMB sends messages rather than a semaphore.  The
+    structure appears to consist of the union of a MessageControlBlock and a
+    TimerControlBlock.
+    
+  MessageControlBlock
+    This is to message queues as the TCB is to timer queues.  The structure
+    consists of four bytes:
+      *next - pointer to the next element in the MCB queue
+      semaphore - task(s) owning this MCB (?)
+    
+  PID
+    The size of the Process ID varies depending on whether single-stepping is
+    enabled, which adds two unsigned char values.  The standard PID is defined
+    as:
+      *next - pointer to the next PID in the chain
+      flags/priority - unsigned char
+      *ContextPointer - ?
+
+  Mutex
+    Mutex semaphores are a simple linked list of waiting processes.  The mutex
+    may have the following values:
+
+      SEM_PEND (0)     // Semaphore is reset waiting for a signal
+      SEM_DONE (1)     // Semaphore has been triggered.
+      SEM_WAIT (2)     // Any other value is the address of a processID
+
+    The primary difference between a mutex and a semaphore is a mutex is owned
+    by the process which locked it where a semaphore is not; a semaphore can
+    be unlocked by another process.
+
+  System Object
+    A System Object consists of a link (16 bit pointer) and a semaphore and is
+    followed by 0 or more bytes of data.
+    
+
+Macros:
+  AVRX_GCC_TASKDEF(start, c_stack, priority)
+  AVRX_GCC_TASK(start, c_stack, priority)
+  AVRX_SIGINT(vector)
+
+APIs:
+
+  TASKS:
+  
+  * AvrXInitTask (avrx_tasking.s)
+      Format: AvrXinitTask(&taskTCB);
+      This API will simply initialize a given task by saving the registers on
+      the appropriate stack and initializing all registers to be used to zero.
+
+  * AvrXRunTask (avrx_tasking.s)
+      Format: AvrRunTask(&taskTCB);
+      This API will start a task by first calling the AvrXInitTask followed by
+      calling AvrXResume.  Either this or AvrXInitTask must be called by main()
+      to get things going.
+      
+  * AvrXSuspend (avrx_suspend.s)
+      Format: AvrXSuspend(&taskPID);
+      This API marks a PID for suspension and attempts to remove it from the
+      run queue.
+
+  * AvrXResume (avrx_tasking.s)
+      Format: AvrXResume(&taskPID);
+      This API gets a task ready to run again by inserting the PID into the
+      run queue.  
+
+  * AvrXTaskExit (avrx_terminate.s)
+      Format: AvrXTaskExit;
+      This API should be called when a task is complete and will no longer
+      run.  It acts like the "return" in a normal function.  Ideally, the task
+      should be idle (not waiting on any semiphores) before this is called.
+      
+  * AvrXTerminate (avrx_terminate.s)
+      Format: AvrXTerminate(&taskPID);
+      Similar to the AvrXTaskExit function except that this one is used to
+      kill another task.
+      
+  * AvrXHalt (avrx_halt.s)
+      Format: AvrXHalt;
+      This API effectively halts the processor by disabling interrupts and
+      then doing a "branch self".
+
+      
+  SEMAPHORES:
+  
+  * AvrXSetSemaphore (avrx_semaphores.s)
+      Format: AvrXSetSemaphore(&mutex);
+      This API will set a semaphore if it is not already set.
+  
+  * AvrXIntSetSemaphore (avrx_semaphores.s)
+      Format: AvrXIntSetSemaphore(&mutex);
+      Same as AvrXSetSemaphore above except that this one assumes that code
+      has already switched to the system stack (such as an interrupt handler).
+      
+  * AvrXWaitSemaphore (avrx_semaphores.s)
+      Format: AvrXWaitSemaphore(&mutex);
+      This API will cause a task to queue up for a semaphore, implementing a
+      Mutual Exclusion Semaphore (mutex).  If used for simple signaling
+      purposes then only one task should wait on the semaphore.
+
+  * AvrXTestSemaphore (avrx_testsmaphore.s)
+      Format: AvrXTestSemaphore(&mutex);
+      A non-blocking call to check the state of a semaphore.  Returns one of
+      the following: SEM_PEND, SEM_DONE or SEM_WAIT.
+
+  * AvrXIntTestSemaphore (avrx_testsmaphore.s)
+      Format: AvrXIntTestSemaphore(&mutex);
+      Same as the AvrXTestSemaphore except that it assumes that code has
+      already switched to the system stack.
+  
+  * AvrXResetSemaphore (avrx_resetsemaphore.s)
+      Format: AvrXResetSemaphore(&mutex);
+      This API forces a semaphore to the SEM_PEND state.
+      
+
+  TIMERS:
+  
+  * AvrXStartTimer (avrx_timequeue.s)
+      Format: AvrXStartTimer(&TCB, unsigned);
+      This non-blocking API will add the TCB into the timer queue using the
+      second parameter as the wait time (number of timer ticks).
+      
+  * AvrXDelay (avrx_timequeue.s)
+      Format: AvrXDelay(&TCB, unsigned);
+      This is a blocking version of AvrXStartTimer and has the same parameters.
+      It is implemented by calling AvrXStartTimer followed by AvrXWaitTimer.
+
+  * AvrXTimerHandler (avrx_timequeue.s)
+      Format: AvrXTimerHandler();
+      This is an ISR that must be called within a _Prolog/_Epilog section.  Be
+      careful; most registers are trashed by the call.
+
+  * AvrXCancelTimer (avrx_canceltimer.s)
+      Format: AvrXCancelTimer(&TCB);
+      This API will dequeue a TCB from the TCB chain.  Returns a pointer to
+      the removed timer or a 0 on failure.
+
+  * AvrXWaitTimer (avrx_semaphores.s)
+      Format: AvrXWaitTimer(&TCB);
+      This blocking API call will wait on a timer to expire.
+
+  * AvrXTestTimer (avrx_testsemaphore.s)
+      Format: AvrXTestTimer(&TCB);
+      This non-blocking API call tests the state of a timer.  Returns one of
+      SEM_WAIT, SEM_PEND or SEM_DONE.
+      
+  * AvrXStartTimerMessage (avrx_starttimermessage.s)
+      Format: AvrXStartTimerMessage(&TMB, unsigned, &MessageQueue);
+      This API will start a timer that sends a message when a timeout occurs.
+      One case where this might be useful is where you want to time out an
+      input message.  Start a timer that sends a message to the same message
+      queue and then wait on the queue.  When something shows up it will either
+      be the expected message or a timeout message.
+
+  * AvrXCancelTimerMessage (avrx_canceltimermessage.s)
+      Format: AvrXCancelTimerMessage(&TMB, &MessageQueue);
+      This API will remove a timer messgae that has been started but is no
+      longer needed.
+
+  MESSAGE QUEUES:
+  
+  * AvrXSendMessage (avrx_message.s)
+      Format: AvrXSendMessage(&MessageQueue, &MCB);
+      This non-blocking API will place the MCB message on the MessageQueue.
+
+  * AvrXIntSendMessage (avrx_message.s)
+      Format: AvrXIntSendMessage(&MessageQueue, &MCB);
+      This is the same as the previous API except that it is run at the
+      interrupt level, which means that it must be called from within a
+      _Epilog/_Prolog wrapper.
+
+  * AvrXWaitMessage (avrx_message.s)
+      Format: AvrXWaitMessage(&MessageQueue);
+      This blocking API is similar to the previous API except that it will
+      wait until a message becomes available before returning it.
+
+  * AvrXRecvMessage (avrx_recvmessage.s)
+      Format: AvrXRecvMessage(&MessageQueue);
+      Returns the first item from MessageQueue or a zero if the queue is empty.
+
+  * AvrXAckMessage (avrx_semaphores.s)
+      Format: AvrXAckMessage(&MCB);
+      This allows handshaking to be done through message queues.  The sequence
+      would be AvrXSendMessage -> AvrXWaitMessage -> AvrXAckMessage ->
+      AvrXWaitMessageAck.
+
+  * AvrXTestMessageAck (avrx_testsmaphore.s)
+      Format: AvrXTestMessageAck(&MCB);
+      Returns the current state of the MCB (SEM_WAIT, SEM_PEND or SEM_DONE).
+
+  * AvrXWaitMessageAck (avrx_semaphores.s)
+      Format: AvrXWaitMessageAck(&MCB);
+      A blocking API that will wait for a particular MCB to be returned.
+
+  SYSTEM OBJECTS:
+  * AvrXSetObjectSemaphore (avrx_semaphores.s)
+      Format: AvrXSetObjectSemaphore(&mutex);
+      Similar to AvrXSetSemaphore except that it applies to System Objects.
+      
+  * AvrXIntSetObjectSemaphore (avrx_semaphores.s)
+      Format: AvrXIntSetObjectSemaphore(&mutex);
+      Same as above except that it assumes the code is running at the
+      interrupt level.
+
+  * AvrXWaitObjectSemaphore (avrx_semaphores.s)
+      Format: AvrXWaitObjectSemaphore(&mutex);
+      A blocking API which waits on the semaphore in a System Object until it
+      becomes SEM_DONE.
+      
+  * AvrXResetObjectSemaphore (avrx_resetsemaphore.s)
+      Format: AvrXResetObjectSemaphore(&mutex);
+      Forces the semaphore to the SEM_PEND state.
+
+  * AvrXTestObjectSemaphore (avrx_testsemaphore.s)
+      Format: AvrXTestObjectSemaphore(&mutex);
+      A non-blocking API that returns the state of the semaphore
+
+  DEBUG:
+  
+  * AvrXStepNext (avrx_singlestep.s)
+      Format: AvrXStepNext();
+      Unsuspends a task, adds it to the run queue, then resuspends the
+      task.
+
+  * AvrXSingleStepNext (avrx_singlestep.s)
+      Format: AvrXSingleStepNext();
+      Marks a suspended task for single step support Jams it on the front of
+      the run queue.  Returns error if task is not suspended.
+  
+  OTHER:
+  
+    IntProlog (avrx_tasking.s)
+      Format: IntProlog();
+      Pushes entire register context onto the stack, returning a frame pointer
+      to the saved context.  If running in user mode upon entry (SysLevel ==
+      0xFF) then switches the stack to the kernel and stores the frame pointer
+      in the current processes PID.
+      
+    Epilog (avrx_tasking.s)
+      Format: Epilog();
+      Restore previous context (kernel or user).  If task has SingleStep flag
+      set, then generate an interrupt before returning to the task.
+      
+    AvrXSetKernelStack (avrx_tasking.s)
+      Format: AvrXSetKernelStack(&stack);
+      Sets AvrX Stack to "newstack" or, if NULL then to the current stack
+            
+    AvrXChangePriority (avrx_priority.s)
+      Format: AvrXChangePriority(&PID, unsigned);
+      Sets the priority of a process to the second parameter.  Returnes the
+      original setting.
+      
+    AvrXPriority (avrx_priority.s)
+      Format: AvrXPriority(&PID);
+      Returns the current priority of the PID.
+      
+    AvrXSelf (avrx_priority.s)
+      Format AvrXSelf();
+      Returns the PID of calling process
+      
+    BeginCritical (avrx.h)
+      Format: BeginCritical;
+      This is a simple #define for the asm "cli" command to turn off
+      interrupts.
+      
+    EndCritical (avrx.h)
+      Format: EndCritical;
+      This is a simple #define for the asm "sei" command to enable interrupts.
+
+  SERIAL:
+  
+    InitSerialIO (serialio.s)
+      Format: InitSerialIO(baud_rate_value);
+      Initializes the USART and sets up the baud rate generator
+    
+    PrintString (serialio.s)
+      Format: PrintString(&FlashString);
+      Prints the string to the USART; returns a pointer to the next character
+      after the NULL.
+
+    PushChar (serialio.s)
+      Format: PushChar();
+      Set a flag so that the next call to GetChar just returns. In effect
+      pushing the last returned charactor to be retrieved by the next routine.
+
+    Other obvious serial commands:
+      GetChar();
+      PutCR();
+      PutSpace();
+      PutChar(char);
+      

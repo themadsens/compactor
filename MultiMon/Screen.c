@@ -185,7 +185,7 @@ static void ScreenRedrawNav(void)
 		//RotInsertValue(SpeedValues, Nav_STW, HIST_LEN);
 		BCLR(Nav_redraw, NAV_HDG);
 
-		sprintf_P(buf, PSTR("STW:  %2d.%dKt"), Nav_STW/10%100, Nav_STW%10);
+		sprintf_P(buf, PSTR("STW:  %2d.%02dKt"), Nav_STW/100%1000, Nav_STW%100);
 		LCDPutStrChkM(buf, Nav_STW, LcdBoxIntX_M(10, 5), LcdBoxIntY_M(0));
 		sprintf_P(buf, PSTR("HDG:   %03d"), Nav_HDG/10%1000);
 		LCDPutStrChkM(buf, Nav_HDG, LcdBoxIntX_M(20, 5), LcdBoxIntY_M(0));
@@ -318,7 +318,7 @@ static void ScreenRedrawAnch(void)
 }
 
 uint16_t Cnfg_AWSFAC  EEPROM = 1000;   // in 1/1000
-uint16_t Cnfg_STWFAC  EEPROM = 1050;   // in 1/1000
+uint16_t Cnfg_STWFAC  EEPROM = 1500;   // in 1/1000
 uint16_t Cnfg_DBSOFF  EEPROM =   80;   // in cm
 uint16_t Cnfg_AWAOFF  EEPROM =    0;   // in deg
 uint16_t Cnfg_HOUSEAH EEPROM =  120;   // in AH

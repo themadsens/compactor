@@ -113,6 +113,7 @@ static uint8_t NmeaParse_P(const char *spec, const char *str, uint16_t *res)
 
 		 case 'D': // Decimal
 		 case 'I': // Fixed point Integer 1/10'ths
+		 case 'i': // Fixed point Integer 1/100'ths
 			*res = 0;
 			i = 0;
 			register int8_t sign = 1;
@@ -120,18 +121,18 @@ static uint8_t NmeaParse_P(const char *spec, const char *str, uint16_t *res)
 				sign = -1;
 				str++;
 			}
-			while (isdigit(*str) || ('I'==c && '.'==*str)) {
+			while (isdigit(*str) || ('I'==toupper(c) && '.'==*str)) {
 				if ('.'==*str) {
-					if(i++ > 1) 
+					if(i++ > ('i'==c ? 2 : 1)) 
 						break;
 				}
 				else
 					*res = *res * 10 + (*str - '0');
 				str++;
-				if (i && i++ > 1)
+				if (i && i++ > ('i'==c ? 2 : 1))
 					break;
 			}
-			if ('I'==c && i < 2)
+			if (('I'==c && i < 2) || ('i'==c && i < 3))
 				return n; // No dec point -> ERROR; Alternatively: *res = *res * 10;
 			*res *= sign;
 			n++;
@@ -376,12 +377,15 @@ void Task_Serial(void)
 
 		 case DEF(2, 'V', 'H'):
 		   // -- Triducer: Water speed
-		   // $SDVHW,,,,,8.7,N,15.2,K*hh<CR><LF>
-			n = NmeaParse_P(PSTR(",,,,,I,C"), msg->buf, num);
-			if (1 == n && 'N' == num[1]) {
+		   // $VWVHW,,T,,M,2.98,N,5.51,K*hh<CR><LF>
+			n = NmeaParse_P(PSTR(",,,,,i,C,i,C"), msg->buf, num);
+			if (4 == n && 'N' == num[1]) {
 				stwTick = msTick;
 				Nav_STW = muldiv(num[0], Cnfg_STWFAC, 1000);
-				sprintf_P(msg->buf+4, PSTR("VHW,,,,,%d.%d,N,,"), Nav_STW/10, Nav_STW%10);
+				uint16_t kmh = muldiv(num[0], Cnfg_STWFAC, 1000);
+				sprintf_P(msg->buf+4, PSTR("VHW,,T,,M,%d.%d,N,%d.%d,K"),
+							 Nav_STW/100, Nav_STW%100,
+							 kmh/100, kmh%100);
 				NmeaPutFifo(0, msg->buf+1);
 				bit = NAV_HDG;
 			}
@@ -391,7 +395,7 @@ void Task_Serial(void)
 		   // -- Triducer: Log
 		   // $SDVLW,999.9,N,777.7,N*hh
 			n = NmeaParse_P(PSTR(",I,C"), msg->buf+4, num);
-			if (1 == n && 'N' == num[1]) {
+			if (2 == n && 'N' == num[1]) {
 				sumTick = msTick;
 				Nav_SUM = num[0];
 				NmeaPutFifo(0, msg->buf+1);
@@ -449,6 +453,7 @@ void Task_Serial(void)
 		 case DEF(5,'R','M'):
 		   // $GPRMC,152828.000,A,3646.8279,N,01432.7178,E,0.00,272.30,081212,,,A*68
 			NmeaGsvFifo(2, msg->buf+1);
+			NmeaPutFifo(0, msg->buf+1);
 			if (curScreen == SCREEN_GPS) {
 				if (NmeaParse_P(PSTR(",d,,L,L,I,I"), msg->buf+4, (uint16_t *)Gps_STR) == 5) {
 					ScreenUpdate();
