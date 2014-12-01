@@ -30,24 +30,28 @@
 
 #define _NOP() __asm__ __volatile__("nop")
 
-#if defined (__AVR_ATtiny24__) || defined (__AVR_ATtiny44__)
+#if defined (__AVR_ATtiny24__) || defined (__AVR_ATtiny44__) || defined (__AVR_ATtiny84__)
 
 #define WIND_PIN    SBIT(PORTA, PA1)
-#define ACT_PIN     SBIT(PORTA, PA7)
-#define ACT_OUT     SBIT(DDRA,  PA7)
+#define WIND_OUT    SBIT(DDRA,  PA1)
+#define ACT_PIN     SBIT(PORTA, PA2)
+#define ACT_OUT     SBIT(DDRA,  PA2)
+#define SIN_OUT     SBIT(DDRA,  PA7)
+#define COS_OUT     SBIT(DDRB,  PA2)
 #define SRXD_PIN    SBIT(PINA,  PA0)
 #define SRXD_PU     SBIT(PORTA, PA0)
-#define SRXD_IEN    SBIT(GIMSK, INT0)
+#define SRXD_IEN    SBIT(PCMSK0,PCINT0)
 #define SER_SCALE   1
 #define TIMER_SCALE 1
 #define ISR_LEAD    4 // Determined empiric @ 12 MHz FIXME
 
 #else
-#error "Must be one of ATtiny24 ATtiny44"
+#error "Must be one of ATtiny24 ATtiny44 ATtiny84"
 #endif
 
-#define DBG_PIN    SBIT(PORTA, PA5)
-#define DBG_OUT    SBIT(DDRA,  PA5)
+#define DEBUG
+#define DBG_PIN    SBIT(PORTA, PA3)
+#define DBG_OUT    SBIT(DDRA,  PA3)
 #ifdef DEBUG
 #define DBG_SET(x) (DBG_PIN = x)
 #define DBG_INIT(x) (DBG_OUT = x)
@@ -58,19 +62,23 @@
 
 // Phase correct PWM, TOP = FF -> WGM = 1, Prescale = 1 
 #define TIMER_TOP   255
-// @ 12 MHz = 23437
+// @ 16 MHz = 23437
 #define TIMER_PULSE (CPU_FREQ / (TIMER_TOP + 1) / 2) 
 #define CSEC_TOP    (TIMER_PULSE / 100)
 
-#define BAUDRATE     4800
 // @ 12 MHz = 2500
 #define SERIAL_TOP  (((CPU_FREQ + BAUDRATE / 2) / BAUDRATE / SER_SCALE) - 1)
 
 uint8_t nmeaState; // Counter in NMEALead or state
-uint8_t actTimer; // Minimum activity light pulse width
+int8_t  actTimer; // Minimum activity light pulse width
 
-// Sentence: $WIMWV,30.0,R,1.2,N,A
-// Example:  $WIMWV,214.8,R,0.1,K,A*28
+uint16_t csecCnt;     // < 1000 => Since boot; > 1000 Since last NMEA Msg
+uint16_t csecInc = 0; // When to tick csecCnt
+
+//           0       10         20   26
+//           +--------+----------+----+----
+// Example:  $WIMWV,214.8,R,20.1,K,A*28   
+//
 //
 //Field# 	Example 	Description
 //     1 	214.8 	Wind Angle
@@ -90,6 +98,7 @@ enum  {
 	NMEA_ST_WIND_FRAC  = 14,
 	NMEA_ST_WIND_UNIT  = 15,
 	NMEA_ST_WIND_VAL   = 16,
+	NMEA_ST_WIND_END   = 17,
 };
 
 uint16_t windAngle = 75;
@@ -102,27 +111,25 @@ uint16_t windSpeed_;
 void NMEADecode(int ch)
 {
 	volatile uint32_t num;
-	//num = (uint16_t) strchr_P(NMEALead, ch); //FIXME: Seems to fix compiler error
-#if 0
-			//DEBUG
-			if (NULL != strchr_P(NMEALead, ch)) {
-				num = ch;
-				DBG_SET(1);
-			}
-#endif
-	num = ch - '0';
+	char c = ch;
+	num = (uint16_t) strchr_P(NMEALead, ch); //FIXME: Seems to fix compiler error
+	num = c - '0';
 	if (nmeaState < NMEA_LEAD_MAX) {
 		char test = pgm_read_byte(&NMEALead[nmeaState]);
 		if (test == '\a' || ch == test) {
 			nmeaState++;
+			if (nmeaState == 1) {
+				ACT_PIN = 0;                 // Activity light ON
+				actTimer = 0;
+			}
 		}
 		else {
 			nmeaState = 0;
 		}
 		if (nmeaState == NMEA_LEAD_MAX) {
-			ACT_PIN = 0;                 // Activity light ON
-			actTimer = 1;
 			windAngle_ = 0;
+			windSpeed_ = 0;
+			nmeaState = NMEA_ST_ANGLE_INT;
 		}
 	}
 	else if (nmeaState == NMEA_ST_ANGLE_INT) {
@@ -138,13 +145,13 @@ void NMEADecode(int ch)
 		if (ch == ',')
 			nmeaState = NMEA_ST_ANGLE_UNIT;
 		else if (num >= 10)
-			nmeaState = 0; // Start over
+			nmeaState = 0; // Error
 	}
 	else if (nmeaState == NMEA_ST_ANGLE_UNIT) {
 		if (ch == ',')
 			nmeaState = NMEA_ST_WIND_INT;
 		else if (ch != 'R')
-			nmeaState = 0; // Start over
+			nmeaState = 0; // Error
 	}
 	else if (nmeaState == NMEA_ST_WIND_INT) {
 		if (num < 10)
@@ -156,7 +163,7 @@ void NMEADecode(int ch)
 			nmeaState = NMEA_ST_WIND_UNIT;
 		}
 		else
-			nmeaState = 0; // Start over
+			nmeaState = 0; // Error
 	}
 	else if (nmeaState == NMEA_ST_WIND_FRAC1) {
 		if (num < 10) {
@@ -170,7 +177,7 @@ void NMEADecode(int ch)
 		if (ch == ',')
 			nmeaState = NMEA_ST_WIND_UNIT;
 		else if (num >= 10)
-			nmeaState = 0; // Start over
+			nmeaState = 0; // Error
 	}
 	else if (nmeaState == NMEA_ST_WIND_UNIT) {
 		if (ch == ',')
@@ -182,19 +189,32 @@ void NMEADecode(int ch)
 		else if (ch == 'N')
 			_NOP();
 		else
-			nmeaState = 0; // Start over
+			nmeaState = 0; // Error
 	}
 	else if (nmeaState == NMEA_ST_WIND_VAL) {
 		if (ch == 'A') {
 			windSpeed = windSpeed_;
 			windAngle = windAngle_;
+			csecCnt = 1000;
+			nmeaState = NMEA_ST_WIND_END;
 		}
+		else
+			nmeaState = 0;               // Error
+	}
+	else if (nmeaState == NMEA_ST_WIND_END) {
+		if (ch == '\r') {
+			nmeaState = 0;               // Start over
+			return;
+		}
+		else if (num > 9 && ch != '*')
+			nmeaState = 0;               // Error
 	}
 	else
 		nmeaState = 0; // Start over
+	if (0 == nmeaState) {
+		ACT_PIN = 1;  // Error -- Activity light OFF
+	}
 }
-
-uint16_t csecCnt = 0;
 
 static uint8_t srx_cur;
 static uint8_t srx_pending;
@@ -205,6 +225,7 @@ ISR(TIM1_COMPA_vect)
 {
 	register uint8_t i;
 
+	//DBG_PIN ^= 1;
 	srx_state--;
 	switch (srx_state)
 	{
@@ -215,6 +236,8 @@ ISR(TIM1_COMPA_vect)
 		srx_state = 0;
 		break;
 
+	 case 7:
+		DBG_SET(0);
 	 default:
 		i = srx_data >> 1;     // LSB first
 		if (SRXD_PIN == 1)
@@ -226,6 +249,7 @@ ISR(TIM1_COMPA_vect)
 		if (SRXD_PIN == 1) {   // stop bit valid
 			srx_cur = srx_data;
 			srx_pending = 1;
+			DBG_SET(1);
 		}
 	}
 	if (!srx_state)
@@ -235,17 +259,18 @@ ISR(TIM1_COMPA_vect)
       SRXD_IEN = 1;
 		// Stop timer
 		TCCR1B &= ~BIT(CS10);
-		DBG_SET(1);
 	}
 }
 
 // Start bit detect ISR
-ISR(INT0_vect)
+ISR(PCINT0_vect)
 {
 	// Scan again in 0.5 bit time. Scan in middle of bit
 #define LEAD ((SERIAL_TOP / 2) + ISR_LEAD)
    TCNT1H = LEAD >> 8;
    TCNT1L = LEAD  & 0xff;
+
+	if (srx_cur != 'U')
 	DBG_SET(0);
 
    SRXD_IEN = 0;                // Disable this interrupt until char RX
@@ -256,7 +281,7 @@ ISR(INT0_vect)
 
 ISR(TIM0_OVF_vect)
 {
-	csecCnt++;
+	csecInc++;
 }
 
 static inline u8 ugetchar(void)			// wait until byte received
@@ -272,24 +297,31 @@ uint16_t curAngle;
 int main(void)
 {
 	// Might save a few bytes here with a single assignment
-	SRXD_PU    = 1;
-	ACT_OUT    = 1;
+	SRXD_PU   = 1;
+	ACT_OUT   = 1;
+	WIND_OUT  = 1;
+	SIN_OUT   = 1;
+	COS_OUT   = 1;
+	// TODO Do we need to set dir. for pwm outputs
 	DBG_INIT(1);
 
 	// 1. Pin change interrupt enable
 	// 2. Timer 0 connected to main clock. Prescale=1 PHC-PWM TOP=FF
 	// 3. Timer 1 running at baud rate  -- with interrupt enabled
-	MCUCR = BIT(ISC01);    // 1.
-	TCCR0A = BIT(COM0A1) | BIT(COM0B1) | BIT(WGM00);   // 2.
-	TCCR0B = BIT(CS00);    // 2. 
-	TCCR1A = 0;            // 2.
-	TCCR1B = BIT(WGM12);   // 2.
-	OCR1AH = SERIAL_TOP>>8;// 4.
-	OCR1AL = SERIAL_TOP&0xff;// 4.
-	TIMSK0 = BIT(TOIE0);  // 4.
-	TIMSK1 = BIT(OCIE1A);  // 4.
+	MCUCR = BIT(ISC01);                              // 1.
+	GIMSK = BIT(PCIE0);                              // 1.
+	TCCR0A = BIT(COM0A1) | BIT(COM0B1) | BIT(WGM00); // 2.
+	TCCR0B = BIT(CS00);                              // 2.
+	TIMSK0 = BIT(TOIE0);                             // 2.
+	TCCR1A = 0;                                      // 3.
+	TCCR1B = BIT(WGM12);                             // 3.
+	OCR1AH = SERIAL_TOP>>8;                          // 3.
+	OCR1AL = SERIAL_TOP&0xff;                        // 3.
+	TIMSK1 = BIT(OCIE1A);                            // 3.
 
-	SRXD_IEN = 1;       // Arm start bit interrupt
+	ACT_PIN = 0;        // Activity light ON for 1 sec on boot
+	DBG_SET(1);         // Debug LED off initially
+	actTimer = -50;
 
 	set_sleep_mode(SLEEP_MODE_IDLE);
    sei();                       // Rock & roll
@@ -313,8 +345,8 @@ int main(void)
 
 
 		// Main timer
-		if (csecCnt >= CSEC_TOP) {
-			csecCnt -= CSEC_TOP;
+		if (csecInc >= CSEC_TOP) {
+			csecInc -= CSEC_TOP;
 		}
 		else
 			continue;
@@ -322,28 +354,41 @@ int main(void)
 		/**
 		 * Henceforth every 1/100 second
 		 */
+		if (csecCnt < 60000)
+			csecCnt++;
 
-		register int incr = 1;
-		if (curAngle > windAngle) {
-			if (curAngle - windAngle < 180)
+		if (csecCnt < 3000) {
+			register int incr = 1;
+			if (curAngle > windAngle) {
+				if (curAngle - windAngle < 180)
+					incr = -1;
+			}
+			else if (windAngle - curAngle > 180)
 				incr = -1;
+			curAngle = (curAngle + incr + 360) % 360;
 		}
-		else 
-			if (windAngle - curAngle > 180)
-				incr = -1;
-		curAngle = (curAngle + incr + 360) % 360;
+		else {
+			curAngle = 0;
+			windSpeed = 0;
+		}
 
 		// TRIGINT_MAX / 360 ~= 45.51 -- Keep it in 16bit!
 		register int deg = curAngle;
-		register int8_t sin = trigint_sin8(deg * 45 + (deg * 51 / 100));
+		register uint8_t sin = trigint_sin8u(deg * 45 + (deg * 51 / 100));
 		deg = (90 - deg + 360) % 360;
-		register int8_t cos = trigint_sin8(deg * 45 + (deg * 51 / 100));
-		OCR0A = sin;
-		OCR0B = cos;
+		register uint8_t cos = trigint_sin8u(deg * 45 + (deg * 51 / 100));
+		OCR0A = (sin * 145 / 255) + 110;
+		OCR0B = (cos * 145 / 255) + 110;
 
-		actTimer++;
-		if (actTimer > 5)
+		if (actTimer < 100)
+			actTimer++;
+		if (csecCnt > 100 && actTimer == 9) {
 			ACT_PIN = 1;                 // Activity light OFF
+		}
+		if (csecCnt == 100) {
+			ACT_PIN = 1;                 // Activity light OFF
+			SRXD_IEN = 1;       // Arm start bit interrupt
+		}
 	}
 }
 
