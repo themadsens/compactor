@@ -35,18 +35,19 @@
 TRUE	= 1
 FALSE	= 0
 
-AVRDUDE_PROGRAMMER = usbtiny
+#AVRDUDE_PROGRAMMER = usbtiny
+AVRDUDE_PROGRAMMER = dragon_dw
 AVRDUDE_PORT = usb     # programmer connected to serial device
 
 # MCU name
 #MCU      = atmega8
 #MCU      = atmega16
-MCU      = attiny44
+MCU       = attiny84
 #MCU      = at90s8515
 
 # default hardware values in case they are not defined in the source
 
-CPUCLK	= 12000000L
+CPUCLK	= 16000000L
 BAUDRATE= 4800
 TICKRATE= 1000
 
@@ -279,6 +280,9 @@ ALL_ASFLAGS = -mmcu=$(MCU) -I. -x assembler-with-cpp $(ASFLAGS)
 
 
 all: begin gccversion sizebefore build sizeafter finished end
+
+$(PROJECT): all
+
 #all: sizebefore build sizeafter
 
 build: $(OBJDIR) elf hex lss sym
