@@ -35,10 +35,6 @@
 TRUE	= 1
 FALSE	= 0
 
-#AVRDUDE_PROGRAMMER = usbtiny
-AVRDUDE_PROGRAMMER = dragon_dw
-AVRDUDE_PORT = usb     # programmer connected to serial device
-
 # MCU name
 #MCU      = atmega8
 #MCU      = atmega16
@@ -183,6 +179,9 @@ LDFLAGS += $(PRINTF_LIB) $(SCANF_LIB) $(MATH_LIB)
 # Type: avrdude -c ?
 # to get a full listing.
 #
+AVRDUDE_PROGRAMMER = dragon_isp
+#AVRDUDE_PROGRAMMER = dragon_dw
+AVRDUDE_PORT = usb     # programmer connected to serial device
 #AVRDUDE_PROGRAMMER = dragon_jtag
 #AVRDUDE_PROGRAMMER = jtag1
 
@@ -423,9 +422,11 @@ $(OBJDIR)/%.o : %.S
 
 jtag1:   program
 arduino: program
+usbtiny: program
 arduino jtag1: override AVRDUDE_PORT=com4
 arduino: override AVRDUDE_PROGRAMMER=arduino
 jtag1  : override AVRDUDE_PROGRAMMER=jtag1
+usbtiny: override AVRDUDE_PROGRAMMER=usbtiny
 
 # Target: clean project.
 clean: begin clean_list finished end
