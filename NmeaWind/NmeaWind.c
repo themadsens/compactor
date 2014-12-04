@@ -107,6 +107,87 @@ uint16_t windSpeed = 100; // In 1/10 knots
 uint16_t windAngle_;
 uint16_t windSpeed_;
 
+int16_t speedCor[] PROGMEM = {
+   -2,    //  0 Kts
+  -12,    // 10 Kts
+  -16,    // 20 Kts
+  -14,    // 30 Kts
+   -7,    // 40 Kts
+    7,    // 50 Kts
+   50,    // 60 Kts
+   85,    // 70 Kts
+  138,    // 80 Kts
+  180,    // 90 Kts
+};
+int16_t windSpeedLUT(int16_t windSpeedIn)
+{
+#if 1
+	return windSpeedIn + pgm_read_word(&speedCor[windSpeedIn/100]);
+#else
+	if (windSpeedIn > 900)
+		return windSpeedIn + pgm_read_word(&speedCor[9]);
+	else if (0 == (windSpeedIn/10) % 10)
+		return windSpeedIn + pgm_read_word(&speedCor[windSpeedIn/100]);
+
+	register int16_t lo = pgm_read_word(&speedCor[windSpeedIn/100]);
+	register int16_t hi = pgm_read_word(&speedCor[(windSpeedIn + 99)/100]);
+
+	return windSpeedIn + lo + (hi - lo) * (windSpeedIn % 100) / 100;
+#endif
+}
+
+int16_t deviation[] PROGMEM = {
+	 +5,    //    0 Deg
+	 +3,    //   10 Deg
+	 +3,    //   20 Deg
+	 +0,    //   30 Deg
+	 +0,    //   40 Deg
+	 -2,    //   50 Deg
+	 -2,    //   60 Deg
+	 -3,    //   70 Deg
+	 -5,    //   80 Deg
+	 -7,    //   90 Deg
+	 -6,    //  100 Deg
+	 -6,    //  110 Deg
+	 -8,    //  120 Deg
+	 -8,    //  130 Deg
+	 -5,    //  140 Deg
+	 -7,    //  150 Deg
+	 -5,    //  160 Deg
+	 -5,    //  170 Deg
+	 -5,    //  180 Deg
+	 -3,    //  190 Deg
+	 -2,    //  200 Deg
+	 -2,    //  210 Deg
+	 -1,    //  220 Deg
+	 +1,    //  230 Deg
+	 +2,    //  240 Deg
+	 +3,    //  250 Deg
+	 +3,    //  260 Deg
+	 +6,    //  270 Deg
+	 +6,    //  280 Deg
+	 +7,    //  290 Deg
+	 +7,    //  300 Deg
+	 +6,    //  310 Deg
+	 +6,    //  320 Deg
+	 +7,    //  330 Deg
+	 +6,    //  340 Deg
+	 +6,    //  350 Deg
+};
+int16_t windAngleLUT(int16_t windAngleIn)
+{
+#if 1
+	return windAngleIn + pgm_read_word(&deviation[windAngleIn/10]);
+#else
+	if (0 == windAngleIn % 10)
+		return windAngleIn + pgm_read_byte(&deviation[windAngleIn/10]);
+
+	register int8_t lo = pgm_read_byte(&deviation[windAngleIn/10]);
+	register int8_t hi = pgm_read_byte(&deviation[((windAngleIn + 10) % 360) / 10]);
+
+	return windAngleIn + lo + (hi - lo) * (windAngleIn % 10) / 10;
+#endif
+}
 
 void NMEADecode(int ch)
 {
@@ -193,8 +274,8 @@ void NMEADecode(int ch)
 	}
 	else if (nmeaState == NMEA_ST_WIND_VAL) {
 		if (ch == 'A') {
-			windSpeed = windSpeed_;
-			windAngle = windAngle_;
+			windSpeed = windSpeedLUT(windSpeed_);
+			windAngle = windAngleLUT(windAngle_);
 			csecCnt = 1000;
 			nmeaState = NMEA_ST_WIND_END;
 		}
@@ -279,9 +360,17 @@ ISR(PCINT0_vect)
 	TCCR1B |= BIT(CS10);
 }
 
+uint16_t windPulse;
 ISR(TIM0_OVF_vect)
 {
 	csecInc++;
+
+	if (windSpeed > 2 && 0 == --windPulse) {
+		WIND_PIN ^= 1;
+		// 100 hz at 60 kts. 60 kts = 600 -- Empiric => 52 kt
+		windPulse = TIMER_PULSE * 520 / 100 / 2 / windSpeed;
+	}
+
 }
 
 static inline u8 ugetchar(void)			// wait until byte received
@@ -292,7 +381,6 @@ static inline u8 ugetchar(void)			// wait until byte received
    return srx_cur;
 }
 
-uint16_t windPulse;
 uint16_t curAngle;
 int main(void)
 {
@@ -337,13 +425,6 @@ int main(void)
 			NMEADecode(ugetchar());
 		}
 
-		if (windSpeed > 2 && 0 == --windPulse) {
-			WIND_PIN ^= 1;
-			// 100 hz at 60 kts. 60 kts = 600
-			windPulse = TIMER_PULSE * 600 / 100 / 2 / windSpeed;
-		}
-
-
 		// Main timer
 		if (csecInc >= CSEC_TOP) {
 			csecInc -= CSEC_TOP;
@@ -357,7 +438,12 @@ int main(void)
 		if (csecCnt < 60000)
 			csecCnt++;
 
-		if (csecCnt < 3000) {
+		if (csecCnt > 2000 + 1000) {
+			// Timeout after 20 seconds
+			curAngle = 0;
+			windSpeed = 0;
+		}
+		else {
 			register int incr = 1;
 			if (curAngle > windAngle) {
 				if (curAngle - windAngle < 180)
@@ -367,18 +453,15 @@ int main(void)
 				incr = -1;
 			curAngle = (curAngle + incr + 360) % 360;
 		}
-		else {
-			curAngle = 0;
-			windSpeed = 0;
-		}
 
 		// TRIGINT_MAX / 360 ~= 45.51 -- Keep it in 16bit!
 		register int deg = curAngle;
 		register uint8_t sin = trigint_sin8u(deg * 45 + (deg * 51 / 100));
 		deg = (90 - deg + 360) % 360;
 		register uint8_t cos = trigint_sin8u(deg * 45 + (deg * 51 / 100));
-		OCR0A = (sin * 145 / 255) + 110;
-		OCR0B = (cos * 145 / 255) + 110;
+		// PWM of 7.9V -- Vmin = 1.3 - Vmax = 6.3
+		OCR0B = 255 - ((sin * 165 / 255) + 45);
+		OCR0A = 255 - ((cos * 165 / 255) + 45);
 
 		if (actTimer < 100)
 			actTimer++;
