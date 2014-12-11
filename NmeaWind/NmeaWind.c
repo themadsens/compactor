@@ -108,84 +108,87 @@ uint16_t windAngle_;
 uint16_t windSpeed_;
 
 int16_t speedCor[] PROGMEM = {
-   -2,    //  0 Kts
-  -12,    // 10 Kts
+   -1,    //  0 Kts
+  -11,    // 10 Kts
   -16,    // 20 Kts
-  -14,    // 30 Kts
+  -15,    // 30 Kts
    -7,    // 40 Kts
     7,    // 50 Kts
-   50,    // 60 Kts
-   85,    // 70 Kts
-  138,    // 80 Kts
-  180,    // 90 Kts
+   33,    // 60 Kts
+   71,    // 70 Kts
+  117,    // 80 Kts
+  177,    // 90 Kts
 };
 int16_t windSpeedLUT(int16_t windSpeedIn)
 {
-#if 1
+#if 0
 	return windSpeedIn + pgm_read_word(&speedCor[windSpeedIn/100]);
 #else
 	if (windSpeedIn > 900)
 		return windSpeedIn + pgm_read_word(&speedCor[9]);
-	else if (0 == (windSpeedIn/10) % 10)
+
+	register int16_t mod = windSpeedIn % 100;
+	if (0 == mod)
 		return windSpeedIn + pgm_read_word(&speedCor[windSpeedIn/100]);
 
 	register int16_t lo = pgm_read_word(&speedCor[windSpeedIn/100]);
 	register int16_t hi = pgm_read_word(&speedCor[(windSpeedIn + 99)/100]);
 
-	return windSpeedIn + lo + (hi - lo) * (windSpeedIn % 100) / 100;
+	return windSpeedIn + lo + ((hi - lo) * mod / 100);
 #endif
 }
 
 int16_t deviation[] PROGMEM = {
-	 +5,    //    0 Deg
+	 +4,    //    0 Deg
 	 +3,    //   10 Deg
-	 +3,    //   20 Deg
+	 +1,    //   20 Deg
 	 +0,    //   30 Deg
-	 +0,    //   40 Deg
+	 -1,    //   40 Deg
 	 -2,    //   50 Deg
-	 -2,    //   60 Deg
-	 -3,    //   70 Deg
-	 -5,    //   80 Deg
-	 -7,    //   90 Deg
-	 -6,    //  100 Deg
-	 -6,    //  110 Deg
-	 -8,    //  120 Deg
-	 -8,    //  130 Deg
-	 -5,    //  140 Deg
+	 -3,    //   60 Deg
+	 -6,    //   70 Deg
+	 -7,    //   80 Deg
+	 -9,    //   90 Deg
+	 -8,    //  100 Deg
+	 -8,    //  110 Deg
+	 -9,    //  120 Deg
+	 -9,    //  130 Deg
+	 -7,    //  140 Deg
 	 -7,    //  150 Deg
-	 -5,    //  160 Deg
-	 -5,    //  170 Deg
-	 -5,    //  180 Deg
-	 -3,    //  190 Deg
-	 -2,    //  200 Deg
-	 -2,    //  210 Deg
-	 -1,    //  220 Deg
-	 +1,    //  230 Deg
+	 -7,    //  160 Deg
+	 -7,    //  170 Deg
+	 -7,    //  180 Deg
+	 -5,    //  190 Deg
+	 -4,    //  200 Deg
+	 -4,    //  210 Deg
+	 -2,    //  220 Deg
+	 +0,    //  230 Deg
 	 +2,    //  240 Deg
-	 +3,    //  250 Deg
+	 +2,    //  250 Deg
 	 +3,    //  260 Deg
-	 +6,    //  270 Deg
-	 +6,    //  280 Deg
-	 +7,    //  290 Deg
-	 +7,    //  300 Deg
+	 +5,    //  270 Deg
+	 +5,    //  280 Deg
+	 +5,    //  290 Deg
+	 +5,    //  300 Deg
 	 +6,    //  310 Deg
-	 +6,    //  320 Deg
-	 +7,    //  330 Deg
-	 +6,    //  340 Deg
-	 +6,    //  350 Deg
+	 +5,    //  320 Deg
+	 +5,    //  330 Deg
+	 +4,    //  340 Deg
+	 +4,    //  350 Deg
 };
 int16_t windAngleLUT(int16_t windAngleIn)
 {
-#if 1
+#if 0
 	return windAngleIn + pgm_read_word(&deviation[windAngleIn/10]);
 #else
-	if (0 == windAngleIn % 10)
-		return windAngleIn + pgm_read_byte(&deviation[windAngleIn/10]);
+	register int16_t mod = windAngleIn % 10;
+	if (0 == mod)
+		return windAngleIn + pgm_read_word(&deviation[windAngleIn/10]);
 
-	register int8_t lo = pgm_read_byte(&deviation[windAngleIn/10]);
-	register int8_t hi = pgm_read_byte(&deviation[((windAngleIn + 10) % 360) / 10]);
+	register int16_t lo = pgm_read_word(&deviation[windAngleIn/10]);
+	register int16_t hi = pgm_read_word(&deviation[((windAngleIn + 9) % 360) / 10]);
 
-	return windAngleIn + lo + (hi - lo) * (windAngleIn % 10) / 10;
+	return windAngleIn + lo + ((hi - lo) * mod / 10);
 #endif
 }
 
@@ -438,7 +441,7 @@ int main(void)
 		if (csecCnt < 60000)
 			csecCnt++;
 
-		if (csecCnt > 2000 + 1000) {
+		if (csecCnt > 4500 + 1000) {
 			// Timeout after 20 seconds
 			curAngle = 0;
 			windSpeed = 0;
